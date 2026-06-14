@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -12,11 +11,12 @@ from openanalog import claude
 from openanalog.confidence import kg_tier
 from openanalog.config import FORGE_STATE, SEEDS_NORMALIZED, ensure_dirs
 from openanalog.forge.dataset_writer import DatasetWriter
-from openanalog.forge.forge_eval import evaluate_forge_fitness
-from openanalog.forge.generator import mutate_netlist, MutationMode
+from openanalog.forge.forge_eval import evaluate_topology_params
 from openanalog.forge.knowledge_graph import KnowledgeGraph
-from openanalog.forge.mutator import directed_mutate
-from openanalog.forge.simulator import is_simulatable
+from openanalog.forge.param_mutator import apply_seed_hints, mutate_params
+from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
+from openanalog.forge.topologies import get_topology
+from openanalog.ingestion.converter import extract_params
 
 console = Console()
 
@@ -26,32 +26,56 @@ FORGE_STATS: dict = {
     "by_topology": {},
 }
 
+FORGE_CATEGORIES = tuple(DEV_MODE_SPECS.keys())
+
+_SEED_TYPE_MAP: dict[str, str] = {
+    "opamp": "opamp",
+    "op_amp": "opamp",
+    "amplifier": "opamp",
+    "diff_amp": "opamp",
+    "ota": "opamp",
+    "comparator": "comparator",
+    "switch": "switch",
+    "analog_switch": "switch",
+    "charge_pump": "charge_pump",
+    "ldo": "ldo",
+    "linear_regulator": "ldo",
+}
+
+
+def _map_seed_category(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    return _SEED_TYPE_MAP.get(raw.lower().replace("-", "_"))
+
 
 def _load_seeds(topology: str | None) -> list[dict]:
     path = SEEDS_NORMALIZED
     if not path.exists():
-        return [
-            {
-                "id": "demo_0",
-                "circuit_type": topology or "tia",
-                "netlist": "* demo\nVDD vdd 0 DC 1.8\nR1 out in 10k\nC1 out 0 1p\n.end",
-            }
-        ]
+        return []
     seeds = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         rec = json.loads(line)
-        if topology and rec.get("circuit_type") != topology:
+        cat = _map_seed_category(rec.get("circuit_type"))
+        if topology and cat != topology:
             continue
-        if rec.get("netlist") and is_simulatable(rec["netlist"]):
+        if rec.get("netlist"):
             seeds.append(rec)
-    if not seeds:
-        console.print(
-            "[yellow]No simulatable seeds (need standard SPICE with V/I sources). "
-            "AnalogGenie/Masala syntax is skipped.[/yellow]"
-        )
-    return seeds or [{"id": "fallback", "circuit_type": topology or "tia", "netlist": ".end\n"}]
+    return seeds
+
+
+def _group_seed_hints(seeds: list[dict]) -> dict[str, list[dict[str, float]]]:
+    grouped: dict[str, list[dict[str, float]]] = {c: [] for c in FORGE_CATEGORIES}
+    for rec in seeds:
+        cat = _map_seed_category(rec.get("circuit_type"))
+        if cat not in grouped:
+            continue
+        hints = extract_params(rec.get("netlist", ""))
+        if hints:
+            grouped[cat].append(hints)
+    return grouped
 
 
 def _update_stats(topo: str, won: bool, stats: dict) -> None:
@@ -75,19 +99,22 @@ def _save_forge_state(state: dict[str, Any]) -> None:
     FORGE_STATE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
-def _forge_worker(args: tuple[str, str, str, list[str]]) -> dict[str, Any] | None:
-    net, seed_topo, seed_id, analyses = args
-    _ = analyses
+def _forge_worker(args: tuple[str, dict[str, float], str, int]) -> dict[str, Any] | None:
+    category, seed_hints, seed_id, generation = args
     try:
-        child = mutate_netlist(net, MutationMode.RANDOM)
-    except ValueError:
+        topology = get_topology(category)
+        base = apply_seed_hints(topology.default_params(), seed_hints, topology)
+        mutated = mutate_params(topology, base, seed=generation)
+        ev = evaluate_topology_params(category, mutated)
+        netlist = topology.emit_netlist(mutated)
+    except (ValueError, KeyError):
         return None
-    ev = evaluate_forge_fitness(child, seed_topo)
     return {
         "topo": ev["inferred_topology"],
-        "seed_topo": seed_topo,
+        "seed_topo": category,
         "seed_id": seed_id,
-        "child": child,
+        "child": netlist,
+        "params": mutated.as_dict() if hasattr(mutated, "as_dict") else {},
         "sim": ev.get("measured", {}),
         "fit": {
             "score": ev["score"],
@@ -107,7 +134,6 @@ def _process_result(
     stats: dict,
     writer: DatasetWriter,
     kg: KnowledgeGraph,
-    stagnant: dict[str, int],
 ) -> None:
     topo = result["topo"]
     fit = result["fit"]
@@ -135,21 +161,13 @@ def _process_result(
         kg.add_node(
             topo,
             result["child"],
-            {},
+            result.get("params", {}),
             result["sim"],
             fitness_pass_rate=1.0,
             generation=generation,
             parent_id=result["seed_id"],
             tier=kg_tier(conf),
         )
-        stagnant[topo] = 0
-    else:
-        stagnant[topo] = stagnant.get(topo, 0) + 1
-        if stagnant[topo] < 50:
-            try:
-                directed_mutate(result["child"], fit["failed_checks"], fit["margin_per_check"])
-            except ValueError:
-                pass
 
 
 def run_forge(
@@ -174,11 +192,23 @@ def run_forge(
         console.print(f"[yellow]Forge already complete ({start}/{n}). Use --reset to restart.[/yellow]")
         return
 
+    if topology:
+        categories = [topology]
+    elif all_topologies:
+        categories = list(FORGE_CATEGORIES)
+    else:
+        categories = list(FORGE_CATEGORIES)
+
     seeds = _load_seeds(None if all_topologies else topology)
+    hint_groups = _group_seed_hints(seeds)
+    if seeds:
+        console.print(f"[dim]Loaded {len(seeds)} seeds for parameter hints (not netlist mutation)[/dim]")
+    else:
+        console.print("[dim]No seed file — mutating topology default params only[/dim]")
+
     kg = KnowledgeGraph()
     kg.load()
     writer = DatasetWriter()
-    stagnant: dict[str, int] = {}
     workers = max(1, workers)
 
     with Progress() as progress:
@@ -186,16 +216,17 @@ def run_forge(
         i = start
         while i < n:
             batch_end = min(i + workers, n)
-            batch_jobs: list[tuple[str, str, str, list[str]]] = []
+            batch_jobs: list[tuple[str, dict[str, float], str, int]] = []
             for j in range(i, batch_end):
-                seed = seeds[j % len(seeds)]
-                topo = seed.get("circuit_type", topology or "unknown")
-                analyses = ["op", "ac", "tran"] if topo == "charge_pump" else ["op", "ac"]
-                batch_jobs.append((seed["netlist"], topo, seed.get("id", "seed"), analyses))
+                category = categories[(i + j) % len(categories)]
+                hints_list = hint_groups.get(category, [])
+                hints = hints_list[(i + j) % len(hints_list)] if hints_list else {}
+                seed_id = f"topo_{category}_{(i + j) % max(1, len(hints_list) or 1)}"
+                batch_jobs.append((category, hints, seed_id, i + j))
 
             if dry_run:
-                for j, job in enumerate(batch_jobs):
-                    _update_stats(job[1], False, stats)
+                for job in batch_jobs:
+                    _update_stats(job[0], False, stats)
                     progress.advance(task)
                 i = batch_end
             elif workers == 1:
@@ -208,7 +239,6 @@ def run_forge(
                             stats=stats,
                             writer=writer,
                             kg=kg,
-                            stagnant=stagnant,
                         )
                     progress.advance(task)
                 i = batch_end
@@ -224,7 +254,6 @@ def run_forge(
                                 stats=stats,
                                 writer=writer,
                                 kg=kg,
-                                stagnant=stagnant,
                             )
                         progress.advance(task)
                 i = batch_end
@@ -254,7 +283,7 @@ def run_forge(
     )
     console.print(
         f"Done: {stats['sims']} sims, {stats['winners']} winners "
-        f"(RS-series bar — not sim_ok)"
+        f"(RS-series bar — topology param mutation)"
     )
 
 

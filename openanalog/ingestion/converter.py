@@ -352,6 +352,93 @@ def prepare_seed_deck(netlist: str) -> str:
     return "\n".join(parts) + "\n"
 
 
+_UNIT_MULT: dict[str, float] = {
+    "f": 1e-15,
+    "p": 1e-12,
+    "n": 1e-9,
+    "u": 1e-6,
+    "m": 1e-3,
+    "k": 1e3,
+    "meg": 1e6,
+    "g": 1e9,
+    "": 1.0,
+}
+
+_PARAM_LINE_RE = re.compile(r"\.param\s+(\w+)=(\S+)", re.I)
+_WL_PAIR_RE = re.compile(
+    r"W=([\d.eE+-]+)([munpf]?)\s+L=([\d.eE+-]+)([munpf]?)",
+    re.I,
+)
+_IREF_LINE_RE = re.compile(
+    r"^\s*I(\w+)\s+\S+\s+\S+\s+\{?([\d.eE+-]+)([munpf]?)\}?",
+    re.I | re.M,
+)
+
+
+def _parse_spice_value(raw: str) -> float:
+    raw = raw.strip().lower().replace("{", "").replace("}", "")
+    m = re.match(r"([\d.e+-]+)([munpfk]?)?", raw)
+    if not m:
+        raise ValueError(f"bad spice value: {raw}")
+    val = float(m.group(1))
+    unit = m.group(2) or ""
+    return val * _UNIT_MULT.get(unit, 1.0)
+
+
+def extract_params(netlist: str) -> dict[str, float]:
+    """
+    Pull W/L, .param, and bias current hints from a converted seed netlist.
+
+    Used by forge to seed parameter search — not netlist structure.
+    """
+    hints: dict[str, float] = {}
+    text = netlist or ""
+
+    for m in _PARAM_LINE_RE.finditer(text):
+        key = m.group(1)
+        try:
+            hints[key] = _parse_spice_value(m.group(2))
+        except ValueError:
+            continue
+
+    wl_idx = 1
+    for m in _WL_PAIR_RE.finditer(text):
+        try:
+            w = _parse_spice_value(m.group(1) + (m.group(2) or ""))
+            l_val = _parse_spice_value(m.group(3) + (m.group(4) or ""))
+        except ValueError:
+            continue
+        w_key = f"W{wl_idx}"
+        l_key = f"L{wl_idx}"
+        hints.setdefault(w_key, w)
+        hints.setdefault(l_key, l_val)
+        hints.setdefault("Wn" if wl_idx == 1 else f"W{wl_idx}", w)
+        hints.setdefault("Wp", w)
+        hints.setdefault("len_n", l_val)
+        hints.setdefault("len_p", l_val)
+        wl_idx += 1
+
+    for m in _IREF_LINE_RE.finditer(text):
+        try:
+            hints.setdefault("Iref", _parse_spice_value(m.group(2) + (m.group(3) or "")))
+        except ValueError:
+            continue
+
+    alias = {
+        "IREF": "Iref",
+        "WN": "Wn",
+        "WP": "Wp",
+        "LENN": "len_n",
+        "LENP": "len_p",
+        "CC": "Cc",
+    }
+    for src, dst in alias.items():
+        if src in hints and dst not in hints:
+            hints[dst] = hints[src]
+
+    return hints
+
+
 def normalize_for_forge(netlist: str) -> tuple[str, list[str], str]:
     """Detect → convert → return flat netlist for storage."""
     from openanalog.ingestion.dialect import detect_dialect

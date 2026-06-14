@@ -19,6 +19,47 @@ _log = logging.getLogger(__name__)
 _UNSCORED_LOGGED = 0
 
 
+def _score_topology_metrics(
+    category: str,
+    metrics,
+    *,
+    topology=None,
+) -> dict[str, Any]:
+    if topology is None:
+        topology = get_topology(category)
+    spec = parse_inline_spec(DEV_MODE_SPECS[category], category=category)
+    cand = score_design(
+        metrics,
+        spec["targets"],
+        measurable=topology.measurable_specs(),
+        weights=topology.spec_weights,
+    )
+    failed = [k for k, v in cand.per_spec.items() if v.get("pass") is False]
+    score = 1 if cand.meets_all and metrics.ok else 0
+    margins = {
+        k: (v.get("measured") if v.get("measured") is not None else -1e9)
+        for k, v in cand.per_spec.items()
+    }
+    return {
+        "score": score,
+        "failed_checks": failed,
+        "margin_per_check": margins,
+        "measured": metrics.as_dict(),
+        "per_spec": cand.per_spec,
+        "sim_ok": metrics.ok,
+        "reason": "meets_all" if score else "spec_miss",
+    }
+
+
+def evaluate_topology_params(category: str, params: Any) -> dict[str, Any]:
+    """Score sized topology parameters on the RS-series bar."""
+    topology = get_topology(category)
+    metrics = topology.measure(params, with_full=True)
+    out = _score_topology_metrics(category, metrics, topology=topology)
+    out["inferred_topology"] = category
+    return out
+
+
 def evaluate_forge_fitness(
     netlist: str,
     seed_circuit_type: str | None = None,
@@ -62,30 +103,7 @@ def evaluate_forge_fitness(
         }
 
     metrics = measure_bench_netlist(inferred, netlist)
-    topology = get_topology(inferred)
-    spec = parse_inline_spec(DEV_MODE_SPECS[inferred], category=inferred)
-    cand = score_design(
-        metrics,
-        spec["targets"],
-        measurable=topology.measurable_specs(),
-        weights=topology.spec_weights,
-    )
-
-    failed = [k for k, v in cand.per_spec.items() if v.get("pass") is False]
-    score = 1 if cand.meets_all and metrics.ok else 0
-
-    margins = {
-        k: (v.get("measured") if v.get("measured") is not None else -1e9)
-        for k, v in cand.per_spec.items()
-    }
-
-    return {
-        "score": score,
-        "inferred_topology": inferred,
-        "failed_checks": failed,
-        "margin_per_check": margins,
-        "measured": metrics.as_dict(),
-        "per_spec": cand.per_spec,
-        "sim_ok": sim_ok and metrics.ok,
-        "reason": "meets_all" if score else "spec_miss",
-    }
+    out = _score_topology_metrics(inferred, metrics)
+    out["inferred_topology"] = inferred
+    out["sim_ok"] = sim_ok and metrics.ok
+    return out
