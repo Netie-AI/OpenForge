@@ -2,9 +2,13 @@
 .venv_wsl/
 __pycache__/
 *.py[cod]
+# secrets
 .env
 .env.local
 env.local
+*.key
+*secret*
+*credential*
 *.gpickle
 papers/processed/
 data/training/
