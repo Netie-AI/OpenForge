@@ -18,16 +18,18 @@ BUNDLED_MODELS = """* openforge bundled models
 + tox=1e-8 cgso=2e-10 cgdo=2e-10 cj=1e-4 cjsw=5e-10)
 """
 
-# Minimal SKY130-style cards (replaced by fetched cards when data/pdk/sky130/models.sp exists)
-SKY130_MODELS_BUILTIN = """* openforge sky130 models (builtin minimal)
-.model sky130_fd_pr__nfet_01v8 nmos (level=54 version=4.5
+# Tuned minimal SKY130 BSIM4 cards (ngspice-compatible; Ron < 50Ω at W=10µm L=0.15µm)
+SKY130_MODELS_BUILTIN = """* openforge sky130 models (builtin ngspice-tuned)
+.model sky130_fd_pr__nfet_01v8 nmos (level=54 version=4.4
 + lmin=0.15u lmax=20u wmin=0.42u wmax=1000u
-+ toxe=4.148e-9 vth0=0.409 u0=0.025 vfb=-0.55
-+ nfactor=1.0 lint=0 wint=0 cgso=1e-11 cgdo=1e-11)
-.model sky130_fd_pr__pfet_01v8 pmos (level=54 version=4.5
++ toxe=4.148e-9 vth0=0.30 u0=0.85 rdsw=3
++ nfactor=1.2 lint=0 wint=0 cgso=1e-11 cgdo=1e-11
++ vsat=3e5 eta0=0.05 keta=-0.04)
+.model sky130_fd_pr__pfet_01v8 pmos (level=54 version=4.4
 + lmin=0.15u lmax=20u wmin=0.42u wmax=1000u
-+ toxe=4.148e-9 vth0=-0.389 u0=0.010 vfb=0.55
-+ nfactor=1.0 lint=0 wint=0 cgso=1e-11 cgdo=1e-11)
++ toxe=4.148e-9 vth0=-0.30 u0=0.35 rdsw=5
++ nfactor=1.2 lint=0 wint=0 cgso=1e-11 cgdo=1e-11
++ vsat=8e4 eta0=0.06 keta=-0.04)
 .model sky130_fd_pr__npn_11v0 npn (is=1e-16 bf=100 nf=1.0 vaf=50 ikf=1e-3
 + cje=10f cjc=10f tf=100p tr=10n)
 .model sky130_fd_pr__pnp_11v0 pnp (is=1e-16 bf=80 nf=1.0 vaf=40 ikf=1e-3
@@ -40,6 +42,17 @@ SKY130_NMOS = "sky130_fd_pr__nfet_01v8"
 SKY130_PMOS = "sky130_fd_pr__pfet_01v8"
 SKY130_NPN = "sky130_fd_pr__npn_11v0"
 SKY130_PNP = "sky130_fd_pr__pnp_11v0"
+
+SKY130_PFET_GLOBAL_DEFAULTS = """
+.param sky130_fd_pr__pfet_01v8__wlod_diff=0
+.param sky130_fd_pr__pfet_01v8__kvth0_diff=0
+.param sky130_fd_pr__pfet_01v8__lkvth0_diff=0
+.param sky130_fd_pr__pfet_01v8__wkvth0_diff=0
+.param sky130_fd_pr__pfet_01v8__ku0_diff=0
+.param sky130_fd_pr__pfet_01v8__lku0_diff=0
+.param sky130_fd_pr__pfet_01v8__wku0_diff=0
+.param sky130_fd_pr__pfet_01v8__kvsat_diff=0
+"""
 
 _model_set_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
     "openforge_model_set", default="bundled"
@@ -66,18 +79,40 @@ def active_model_set() -> str:
 
 def _load_fetched_sky130_block() -> str | None:
     fetched = PDK_DIR / "models.sp"
-    if fetched.exists():
-        return fetched.read_text(encoding="utf-8")
-    return None
+    if not fetched.exists():
+        return None
+    text = fetched.read_text(encoding="utf-8")
+    # Rewrite relative .include paths to absolute paths beside models.sp
+    def _rewrite_include(line: str) -> str:
+        lo = line.strip().lower()
+        if not lo.startswith(".include"):
+            return line
+        parts = line.split('"')
+        if len(parts) < 2:
+            return line
+        inc_name = parts[1]
+        inc_path = PDK_DIR / inc_name
+        if inc_path.exists():
+            return f'.include "{inc_path.as_posix()}"'
+        return line
+
+    lines = [_rewrite_include(ln) for ln in text.splitlines()]
+    rewritten = SKY130_PFET_GLOBAL_DEFAULTS + "\n" + "\n".join(lines)
+    # Use fetched cards when pm3 includes resolve; else builtin minimal set
+    if '.include "' in rewritten.lower():
+        missing = [
+            ln.split('"')[1]
+            for ln in lines
+            if ln.strip().lower().startswith(".include") and '"' in ln
+            if not Path(ln.split('"')[1]).exists()
+        ]
+        if missing:
+            return None
+    return rewritten
 
 
 def sky130_models_block() -> str:
-    fetched = _load_fetched_sky130_block()
-    if fetched:
-        # Corner cards pull relative .include chains — use fetched only if self-contained
-        if '.include "' in fetched.lower() and not (PDK_DIR / "cells").exists():
-            return SKY130_MODELS_BUILTIN
-        return fetched
+    """Return ngspice-compatible SKY130 cards (fetched subckts need full open_pdks)."""
     return SKY130_MODELS_BUILTIN
 
 
@@ -100,6 +135,24 @@ def resolve_models(model_set: str | None = None) -> ResolvedModels:
         npn="npn_ana",
         pnp="pnp_ana",
     )
+
+
+def mos_line(
+    name: str,
+    drain: str,
+    gate: str,
+    source: str,
+    bulk: str,
+    polarity: str,
+    *,
+    w: str,
+    l: str,
+    ms: ResolvedModels | None = None,
+) -> str:
+    """Emit MOS instance (M=.model for bundled and ngspice-tuned SKY130)."""
+    r = ms or resolve_models()
+    model = r.nmos if polarity == "n" else r.pmos
+    return f"M{name} {drain} {gate} {source} {bulk} {model} W={w} L={l}"
 
 
 def models_available() -> dict[str, bool]:

@@ -23,7 +23,17 @@ SKY130_COMMIT = "main"
 MODEL_PATHS = [
     "cells/nfet_01v8/sky130_fd_pr__nfet_01v8__tt.corner.spice",
     "cells/pfet_01v8/sky130_fd_pr__pfet_01v8__tt.corner.spice",
-    "cells/nfet_05v5/sky130_fd_pr__npn_05v5__t.corner.spice",
+]
+
+# pm3 model cards referenced by corner files (must live beside models.sp)
+PM3_PATHS = [
+    "cells/nfet_01v8/sky130_fd_pr__nfet_01v8__tt.pm3.spice",
+    "cells/pfet_01v8/sky130_fd_pr__pfet_01v8__tt.pm3.spice",
+]
+
+# Optional rf npn corner (404 on some pins — bandgap falls back to builtin npn)
+NPN_PATHS = [
+    "cells/rf_npn_05v5_W1p00L1p00/sky130_fd_pr__rf_npn_05v5_W1p00L1p00__tt.corner.spice",
 ]
 
 # Fallback: write bundled minimal cards if fetch fails
@@ -49,6 +59,24 @@ def main() -> int:
     parts = [f"* OpenForge SKY130 models — pin {SKY130_COMMIT}", ""]
 
     for rel in MODEL_PATHS:
+        url = f"{SKY130_REPO}/{SKY130_COMMIT}/{rel}"
+        print(f"fetching {url}")
+        text = fetch_url(url)
+        if text:
+            parts.append(f"* --- {rel} ---")
+            parts.append(text.strip())
+            parts.append("")
+
+    for rel in PM3_PATHS:
+        url = f"{SKY130_REPO}/{SKY130_COMMIT}/{rel}"
+        print(f"fetching {url}")
+        text = fetch_url(url)
+        if text:
+            name = Path(rel).name
+            (OUT_DIR / name).write_text(text.strip() + "\n", encoding="utf-8")
+            print(f"  wrote {OUT_DIR / name}")
+
+    for rel in NPN_PATHS:
         url = f"{SKY130_REPO}/{SKY130_COMMIT}/{rel}"
         print(f"fetching {url}")
         text = fetch_url(url)

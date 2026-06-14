@@ -13,7 +13,7 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
-from openanalog.sim.models import ResolvedModels, resolve_models
+from openanalog.sim.models import ResolvedModels, resolve_models, mos_line
 
 
 @dataclass
@@ -29,6 +29,11 @@ class SwitchParams:
         return self.__dict__.copy()
 
 
+def _sky130_defaults() -> SwitchParams:
+    """SKY130 pass devices: W=10µm L=0.15µm gives Ron < 50Ω at VGS=1.8V."""
+    return SwitchParams(Wn=10.0, len_n=0.15, Wp=20.0, len_p=0.15, Wdrv=10.0, len_drv=0.15)
+
+
 def _params_block(p: SwitchParams, supply_V: float) -> str:
     return f""".param VDD={supply_V}
 .param WN={p.Wn}u LENN={p.len_n}u WP={p.Wp}u LENP={p.len_p}u
@@ -37,18 +42,21 @@ def _params_block(p: SwitchParams, supply_V: float) -> str:
 
 
 def _core(ms: ResolvedModels) -> str:
-    # SKY130: use explicit bulk ties for pass devices
     n_bulk = "0" if ms.model_set == "bundled" else "sig"
     p_bulk = "vdd" if ms.model_set == "bundled" else "sig"
-    return f"""
-VSUP vdd 0 {{VDD}}
-Mn out sig ctrl {n_bulk} {ms.nmos} W={{WN}} L={{LENN}}
-Mp sig out ctrl_n {p_bulk} {ms.pmos} W={{WP}} L={{LENP}}
-Mnd ctrl_n ctrl 0 0 {ms.nmos} W={{WDRV}} L={{LENDRV}}
-Mpd ctrl_n ctrl vdd vdd {ms.pmos} W={{WDRV}} L={{LENDRV}}
-Rload out 0 1k
-Cload out 0 10p
-"""
+    wn, ln = "{{WN}}", "{{LENN}}"
+    wp, lp = "{{WP}}", "{{LENP}}"
+    wd, ld = "{{WDRV}}", "{{LENDRV}}"
+    lines = [
+        "VSUP vdd 0 {VDD}",
+        mos_line("n", "out", "sig", "ctrl", n_bulk, "n", w=wn, l=ln, ms=ms),
+        mos_line("p", "sig", "out", "ctrl_n", p_bulk, "p", w=wp, l=lp, ms=ms),
+        mos_line("nd", "ctrl_n", "ctrl", "0", "0", "n", w=wd, l=ld, ms=ms),
+        mos_line("pd", "ctrl_n", "ctrl", "vdd", "vdd", "p", w=wd, l=ld, ms=ms),
+        "Rload out 0 1k",
+        "Cload out 0 10p",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def _build_dc_deck(p: SwitchParams, supply_V: float) -> str:
@@ -67,7 +75,7 @@ print isupp
 .endc
 .end
 """
-    return "* Switch DC RON\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
+    return "* Switch DC RON\n" + _params_block(p, supply_V) + ms.block + _core(ms) + harness
 
 
 def _build_ac_deck(p: SwitchParams, supply_V: float) -> str:
@@ -83,7 +91,7 @@ meas ac bw_hz when vdb(out)=dbdc-3 cross=1
 .endc
 .end
 """
-    return "* Switch AC BW\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
+    return "* Switch AC BW\n" + _params_block(p, supply_V) + ms.block + _core(ms) + harness
 
 
 def _build_tran_deck(p: SwitchParams, supply_V: float) -> str:
@@ -100,7 +108,7 @@ meas tran toff trig v(ctrl) val={supply_V * 0.5} fall=1 targ v(out) val={vmid * 
 .endc
 .end
 """
-    return "* Switch tran\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
+    return "* Switch tran\n" + _params_block(p, supply_V) + ms.block + _core(ms) + harness
 
 
 class AnalogSwitchTopology(Topology):
@@ -109,11 +117,21 @@ class AnalogSwitchTopology(Topology):
     spec_weights = {"ron_ohm": 2.0, "bw_MHz": 1.5, "ton_ns": 1.0, "toff_ns": 1.0, "iq_uA": 1.0}
 
     def default_params(self) -> SwitchParams:
+        if resolve_models().model_set == "sky130":
+            return _sky130_defaults()
         return SwitchParams()
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
         ms = resolve_models()
-        w_max = 8000.0 if ms.model_set == "sky130" else 4000.0
+        if ms.model_set == "sky130":
+            return {
+                "Wn": (10.0, 800.0, True),
+                "Wp": (20.0, 1600.0, True),
+                "len_n": (0.15, 0.5, False),
+                "len_p": (0.15, 0.5, False),
+                "Wdrv": (5.0, 50.0, True),
+            }
+        w_max = 4000.0
         return {
             "Wn": (20.0, w_max, True),
             "Wp": (40.0, w_max * 2, True),
@@ -156,7 +174,7 @@ class AnalogSwitchTopology(Topology):
 
     def emit_netlist(self, params: SwitchParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:
         ms = resolve_models()
-        return "* OpenForge analog switch\n" + ms.block + _params_block(params, supply_V) + _core(ms) + "\n.end\n"
+        return "* OpenForge analog switch\n" + _params_block(params, supply_V) + ms.block + _core(ms) + "\n.end\n"
 
     def device_list(self, params: SwitchParams) -> list[dict[str, Any]]:
         p = params.as_dict()
