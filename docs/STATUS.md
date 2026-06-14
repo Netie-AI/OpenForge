@@ -15,9 +15,11 @@ Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes
 
 ## Forge Status
 - Loop: ✅ topology param mutation → RS fitness gate → winners.jsonl
-- Winners: 238 total (charge_pump=93, ldo=94, switch=34, comparator=17) with netlist + measured_specs
-- Training corpus: NOT YET — need ≥500 winners before finetuning
-- Phase 4: OPEN — corpus scale-up in progress (238/500+ target)
+- Winners: **1002** total (charge_pump=381, ldo=364, switch=135, opamp=53, comparator=69)
+- Opamp warm-start: ✅ Cc=1.9pF center, 35% warm fraction — 53 winners with W1 diversity (σ=0.52)
+- Topology variants: scaffold in `topology_variants.py` (comparator cross-coupled POC)
+- Training corpus: **READY for Phase 5** — ≥1000 winners, ≥50 opamp, all fitness=1
+- Quality note: 66 switch/comparator winners have `tfall_ns=None` (optional spec); core bar still passes
 
 ## Verification
 
