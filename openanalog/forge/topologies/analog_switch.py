@@ -20,12 +20,12 @@ from openanalog.forge.topologies.base import (
 
 @dataclass
 class SwitchParams:
-    Wn: float = 20.0
-    Ln: float = 0.5
-    Wp: float = 40.0
-    Lp: float = 0.5
+    Wn: float = 50.0
+    len_n: float = 0.5
+    Wp: float = 100.0
+    len_p: float = 0.5
     Wdrv: float = 10.0
-    Ldrv: float = 0.5
+    len_drv: float = 0.5
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
@@ -33,30 +33,30 @@ class SwitchParams:
 
 def _params_block(p: SwitchParams, supply_V: float) -> str:
     return f""".param VDD={supply_V}
-.param WN={p.Wn}u LN={p.Ln}u WP={p.Wp}u LP={p.Lp}u
-.param WDRV={p.Wdrv}u LDRV={p.Ldrv}u
+.param WN={p.Wn}u LENN={p.len_n}u WP={p.Wp}u LENP={p.len_p}u
+.param WDRV={p.Wdrv}u LENDRV={p.len_drv}u
 """
 
 _CORE = f"""
 VSUP vdd 0 {{VDD}}
-* transmission gate: sig <-> out, ctrl enables
-Mn out sig ctrl 0 {NMOS} W={{WN}} L={{LN}}
-Mp out sig ctrl_n vdd {PMOS} W={{WP}} L={{LP}}
-* control inverter
-Mnd ctrl_n ctrl 0 0 {NMOS} W={{WDRV}} L={{LDRV}}
-Mpd ctrl_n ctrl vdd vdd {PMOS} W={{WDRV}} L={{LDRV}}
+Mn out sig ctrl 0 {NMOS} W={{WN}} L={{LENN}}
+Mp out sig ctrl_n vdd {PMOS} W={{WP}} L={{LENP}}
+Mnd ctrl_n ctrl 0 0 {NMOS} W={{WDRV}} L={{LENDRV}}
+Mpd ctrl_n ctrl vdd vdd {PMOS} W={{WDRV}} L={{LENDRV}}
 Rload out 0 1k
+Cload out 0 10p
 """
 
 
 def _build_dc_deck(p: SwitchParams, supply_V: float) -> str:
     harness = """
 Vctrl ctrl 0 {VDD}
-Vsig sig 0 2.5
+Vsig sig 0 dc 2.5
 .control
 set filetype=ascii
 op
-let ron = 2.5/abs(i(vsig))
+let iload = abs(v(out)/1000)
+let ron = abs(v(sig)-v(out))/max(iload, 1e-15)
 print ron
 let isupp = abs(i(vsup))
 print isupp
@@ -72,7 +72,7 @@ Vctrl ctrl 0 {VDD}
 Vsig sig 0 dc 2.5 ac 1
 .control
 set filetype=ascii
-ac dec 20 1 1G
+ac dec 30 1 1G
 meas ac bw_hz when vdb(out)=-3
 .endc
 .end
@@ -105,8 +105,8 @@ class AnalogSwitchTopology(Topology):
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
         return {
-            "Wn": (2.0, 200.0, True), "Wp": (4.0, 400.0, True),
-            "Ln": (0.3, 2.0, False), "Lp": (0.3, 2.0, False),
+            "Wn": (10.0, 200.0, True), "Wp": (20.0, 400.0, True),
+            "len_n": (0.3, 2.0, False), "len_p": (0.3, 2.0, False),
             "Wdrv": (2.0, 60.0, True),
         }
 
@@ -121,7 +121,7 @@ class AnalogSwitchTopology(Topology):
         if ok:
             ron = grab_meas("ron", out)
             isupp = grab_meas("isupp", out)
-            m.values["ron_ohm"] = ron if ron and ron < 1e6 else None
+            m.values["ron_ohm"] = ron if ron and 0 < ron < 1e6 else None
             m.values["iq_uA"] = abs(isupp) * 1e6 if isupp else None
         if with_full:
             aok, aout = run_ngspice(_build_ac_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 15))
@@ -134,7 +134,7 @@ class AnalogSwitchTopology(Topology):
                 toff = grab_meas("toff", tout)
                 m.values["ton_ns"] = ton * 1e9 if ton else None
                 m.values["toff_ns"] = toff * 1e9 if toff else None
-            m.raw = tout[-2000:]
+            m.raw = (aout if aok else out)[-2000:]
         m.ok = m.values.get("ron_ohm") is not None
         return m
 
@@ -144,9 +144,9 @@ class AnalogSwitchTopology(Topology):
     def device_list(self, params: SwitchParams) -> list[dict[str, Any]]:
         p = params.as_dict()
         return [
-            {"name": "Mn", "role": "NMOS pass", "W_um": round(p["Wn"], 3), "L_um": round(p["Ln"], 3)},
-            {"name": "Mp", "role": "PMOS pass", "W_um": round(p["Wp"], 3), "L_um": round(p["Lp"], 3)},
-            {"name": "Mdrv", "role": "control inv", "W_um": round(p["Wdrv"], 3), "L_um": round(p["Ldrv"], 3)},
+            {"name": "Mn", "role": "NMOS pass", "W_um": round(p["Wn"], 3), "L_um": round(p["len_n"], 3)},
+            {"name": "Mp", "role": "PMOS pass", "W_um": round(p["Wp"], 3), "L_um": round(p["len_p"], 3)},
+            {"name": "Mdrv", "role": "control inv", "W_um": round(p["Wdrv"], 3), "L_um": round(p["len_drv"], 3)},
         ]
 
     def package_hint(self, spec: dict[str, Any] | None = None) -> str:

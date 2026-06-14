@@ -1,4 +1,4 @@
-"""Comparator topology — fast uncompensated diff pair + output stage."""
+"""Comparator topology — diff pair + output stage."""
 
 from __future__ import annotations
 
@@ -33,7 +33,6 @@ class ComparatorParams:
     Wb: float = 10.0
     Lb: float = 0.8
     Iref: float = 30e-6
-    Rh: float = 50e3
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
@@ -46,7 +45,7 @@ def _params_block(p: ComparatorParams, supply_V: float) -> str:
 .param W1={p.W1}u L1={p.L1}u W3={p.W3}u L3={p.L3}u
 .param W5={p.W5}u L5={p.L5}u W6={p.W6}u L6={p.L6}u
 .param W7={p.W7}u L7={p.L7}u Wb={p.Wb}u Lb={p.Lb}u
-.param IREF={p.Iref} RH={p.Rh}
+.param IREF={p.Iref}
 """
 
 _CORE = f"""
@@ -66,34 +65,50 @@ Rload vout 0 10k
 
 def _build_op_deck(p: ComparatorParams, supply_V: float) -> str:
     harness = """
-Vcm vinp 0 {VCM}
+Vinp vinp 0 {VCM}
 Vinn vinn 0 {VCM}
 .control
 set filetype=ascii
 op
 let isupp = abs(i(vsup))
 print isupp
-print v(vout)
-print v(vinp)
-print v(vinn)
 .endc
 .end
 """
     return "* Comparator OP\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
 
 
+def _build_vos_deck(p: ComparatorParams, supply_V: float) -> str:
+    """Sweep vinp around vinn; input-referred offset = vinp at output mid-crossing - VCM."""
+    vcm = supply_V / 2.0
+    lo, hi = vcm - 0.05, vcm + 0.05
+    mid = supply_V * 0.5
+    harness = f"""
+Vinn vinn 0 {vcm}
+Vinp vinp 0 {vcm}
+.control
+set filetype=ascii
+dc Vinp {lo} {hi} 0.0005
+meas dc vos find v(vinp) when v(vout)={mid} cross=1
+.endc
+.end
+"""
+    return "* Comparator Vos\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
+
+
 def _build_tran_deck(p: ComparatorParams, supply_V: float) -> str:
     vcm = supply_V / 2.0
     lo, hi = vcm - 0.2, vcm + 0.2
     thresh = vcm + 0.05
+    mid = supply_V * 0.5
     harness = f"""
 Vinp vinp 0 pulse({lo} {hi} 1u 1n 1n 8u 16u)
 Vinn vinn 0 {vcm}
 .control
 set filetype=ascii
 tran 10n 10u
-meas tran t_plh trig v(vinp) val={thresh} rise=1 targ v(vout) val={supply_V*0.5} rise=1
-meas tran t_phl trig v(vinp) val={thresh} fall=1 targ v(vout) val={supply_V*0.5} fall=1
+meas tran t_plh trig v(vinp) val={thresh} rise=1 targ v(vout) val={mid} rise=1
+meas tran t_phl trig v(vinp) val={thresh} fall=1 targ v(vout) val={mid} fall=1
 meas tran trise trig v(vout) val={supply_V*0.1} rise=1 targ v(vout) val={supply_V*0.9} rise=1
 meas tran tfall trig v(vout) val={supply_V*0.9} fall=1 targ v(vout) val={supply_V*0.1} fall=1
 .endc
@@ -128,10 +143,12 @@ class ComparatorTopology(Topology):
         if ok:
             isupp = grab_meas("isupp", out)
             m.values["iq_uA"] = abs(isupp) * 1e6 if isupp else None
-            vout = grab_meas("v\\(vout\\)", out) or grab_meas("v(vout)", out)
+        vok, vout = run_ngspice(_build_vos_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 15))
+        if vok:
+            vos = grab_meas("vos", vout)
             vcm = supply_V / 2.0
-            if vout is not None:
-                m.values["vos_mV"] = abs(vout - vcm) * 1000
+            if vos is not None:
+                m.values["vos_mV"] = abs(vos - vcm) * 1000
         if with_full:
             tok, tout = run_ngspice(_build_tran_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 25))
             m.raw = tout[-3000:]
@@ -148,7 +165,7 @@ class ComparatorTopology(Topology):
                 tf = grab_meas("tfall", tout)
                 m.values["trise_ns"] = tr * 1e9 if tr else None
                 m.values["tfall_ns"] = tf * 1e9 if tf else None
-        m.ok = m.values.get("tp_us") is not None or m.values.get("iq_uA") is not None
+        m.ok = m.values.get("tp_us") is not None and m.values.get("vos_mV") is not None
         return m
 
     def emit_netlist(self, params: ComparatorParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:

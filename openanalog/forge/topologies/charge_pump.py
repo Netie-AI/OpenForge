@@ -17,48 +17,59 @@ from openanalog.forge.topologies.base import (
 
 @dataclass
 class ChargePumpParams:
-    stages: int = 3
+    stages: int = 2
     cap_F: float = 100e-9
     freq_Hz: float = 500e3
     rload_ohm: float = 10e3
-    diode_drop: float = 0.35
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
 
 
 def _build_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
-    stages = max(1, min(int(p.stages), 6))
-    caps = "\n".join(f"C{i} n{i} n{i+1} {p.cap_F}" for i in range(stages))
-    diodes = "\n".join(
-        f"D{i} n{i+1} clk{i%2+1} Dmod" for i in range(stages)
-    )
+    stages = max(1, min(int(p.stages), 4))
     period = 1.0 / p.freq_Hz
     half = period / 2.0
-    harness = f"""
-Vsup vdd 0 {supply_V}
-Vclk1 clk1 0 pulse(0 {supply_V} 0 1n 1n {half} {period})
-Vclk2 clk2 0 pulse(0 {supply_V} {half} 1n 1n {half} {period})
-Rload n{stages} 0 {p.rload_ohm}
-Cout n{stages} 0 {p.cap_F * 2}
-.model Dmod D (IS=1e-14 N=1.2 RS=5)
-{diodes}
-{caps}
-C0 n0 vdd {p.cap_F}
-.control
-set filetype=ascii
-tran {period/200} {period*200}
-meas tran vout_avg avg v(n{stages})
-meas tran ripple_pp pp v(n{stages})
-meas tran settle when v(n{stages})={supply_V * stages * 0.5} rise=1
-let isupp = avg(abs(i(vsup)))
-print isupp
-print vout_avg
-print ripple_pp
-.endc
-.end
-"""
-    return "* OpenForge Dickson charge pump\n" + harness
+    tstep = period / 200.0
+    tstop = period * 400.0
+
+    # Dickson ladder: n0=vdd, pump caps C1..Cn between nodes, diodes to clocks
+    cap_lines = [f"Cin n0 vdd {p.cap_F}"]
+    for i in range(1, stages + 1):
+        cap_lines.append(f"C{i} n{i-1} n{i} {p.cap_F}")
+    cap_lines.append(f"Cout n{stages} 0 {p.cap_F * 2}")
+
+    diode_lines = []
+    for i in range(stages):
+        clk = f"clk{(i % 2) + 1}"
+        diode_lines.append(f"D{i} n{i} {clk} Dmod")
+        diode_lines.append(f"D{i}b {clk} n{i+1} Dmod")
+
+    body = "\n".join(
+        [
+            f"* OpenForge Dickson charge pump ({stages} stages)",
+            f"Vsup vdd 0 {supply_V}",
+            f"Vclk1 clk1 0 pulse(0 {supply_V} 0 1n 1n {half} {period})",
+            f"Vclk2 clk2 0 pulse(0 {supply_V} {half} 1n 1n {half} {period})",
+            ".model Dmod D (IS=1e-14 N=1.2 RS=2)",
+            *diode_lines,
+            *cap_lines,
+            f"Rload n{stages} 0 {p.rload_ohm}",
+            ".control",
+            "set filetype=ascii",
+            f"tran {tstep} {tstop}",
+            f"meas tran vout_avg avg v(n{stages}) from={tstop * 0.7} to={tstop}",
+            f"meas tran ripple_pp pp v(n{stages}) from={tstop * 0.7} to={tstop}",
+            f"meas tran isupp_avg avg i(vsup) from={tstop * 0.7} to={tstop}",
+            f"meas tran settle when v(n{stages})={supply_V * 0.8} rise=1",
+            "print isupp_avg",
+            "print vout_avg",
+            "print ripple_pp",
+            ".endc",
+            ".end",
+        ]
+    )
+    return body
 
 
 class ChargePumpTopology(Topology):
@@ -71,7 +82,7 @@ class ChargePumpTopology(Topology):
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
         return {
-            "stages": (2.0, 5.0, False),
+            "stages": (1.0, 3.0, False),
             "cap_F": (10e-9, 500e-9, True),
             "freq_Hz": (50e3, 2e6, True),
             "rload_ohm": (1e3, 50e3, True),
@@ -84,22 +95,22 @@ class ChargePumpTopology(Topology):
         self, params: ChargePumpParams, *, supply_V: float = 5.0, cload_F: float = 10e-12, with_full: bool = True
     ) -> TopologyMetrics:
         m = TopologyMetrics()
-        ok, out = run_ngspice(_build_tran_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 30))
+        ok, out = run_ngspice(_build_tran_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 45))
         m.raw = out[-3000:]
         if not ok:
-            m.error = out[:500]
+            m.error = out[:800]
             return m
         vout = grab_meas("vout_avg", out)
         ripple = grab_meas("ripple_pp", out)
         settle = grab_meas("settle", out)
-        isupp = grab_meas("isupp", out)
+        isupp = grab_meas("isupp_avg", out)
         m.values["vout_V"] = vout
         m.values["ripple_mV"] = ripple * 1000 if ripple else None
         m.values["settle_ms"] = settle * 1000 if settle else None
         m.values["iq_uA"] = abs(isupp) * 1e6 if isupp else None
         if vout and params.rload_ohm > 0:
             m.values["iout_mA"] = (vout / params.rload_ohm) * 1000
-        m.ok = vout is not None
+        m.ok = vout is not None and vout > 0.1
         return m
 
     def emit_netlist(self, params: ChargePumpParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:

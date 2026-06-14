@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e ".[web]" pytest
+      # ngspice behavioral smoke stays local/WSL — bundled models + sim runtime
+      # are not wired into CI yet. Run `make smoke` on a machine with ngspice.
+      - name: Pytest
+        run: python -m pytest tests/ -q --ignore=tests/test_ngspice_behavior.py
