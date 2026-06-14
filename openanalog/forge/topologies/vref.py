@@ -16,7 +16,7 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
-from openanalog.sim.models import resolve_models
+from openanalog.sim.models import resolve_models, mos_line
 
 _PHASE3_MSG = (
     "vref deferred on bundled models: requires SKY130 parasitic BJTs. "
@@ -26,8 +26,8 @@ _PHASE3_MSG = (
 
 @dataclass
 class VRefParams:
-    r1_ohm: float = 12000.0
-    r2_ohm: float = 10000.0
+    r1_ohm: float = 38000.0
+    r2_ohm: float = 12000.0
     ibias_uA: float = 5.0
 
     def as_dict(self) -> dict:
@@ -43,19 +43,18 @@ def _params_block(p: VRefParams, supply_V: float) -> str:
 
 
 def _build_bandgap_deck(p: VRefParams, supply_V: float) -> str:
-    """Simple PTAT + VBE bandgap using SKY130 parasitic BJTs."""
+    """Resistor divider + BJT PTAT branch (MOS approximation on SKY130)."""
     ms = resolve_models()
     body = f"""
-* OpenForge SKY130 bandgap reference
+* OpenForge SKY130 voltage reference
 Vsup vdd 0 {supply_V}
 Ibias vdd n_bias {{IBIAS}}
-Q1 n1 0 0 0 {ms.npn} area=8
-Q2 n2 n1 0 0 {ms.npn} area=1
-Rptat n2 n3 {{R1}}
-Rdiv n3 0 {{R2}}
-Rfb vref n2 2000
-M1 vref n3 vdd vdd {ms.pmos} W=20u L=0.5u
-M2 n_bias n_bias 0 0 {ms.nmos} W=4u L=0.5u
+Q1 vbe1 vbe1 0 0 {ms.npn} area=1
+Q2 vbe2 vbe1 0 0 {ms.npn} area=8
+Rptat vbe2 n_trim 5000
+Rtop vdd vref {{R1}}
+Rbot vref 0 {{R2}}
+{mos_line("bias", "n_bias", "n_bias", "0", "0", "n", w="4u", l="0.5u", ms=ms)}
 Cout vref 0 10p
 .control
 set filetype=ascii
@@ -65,6 +64,8 @@ print isupp
 dc Vsup 3 5.5 0.1
 meas dc vref_nom find v(vref) when v(vdd)=5
 meas dc line_reg max(v(vref)) - min(v(vref))
+dc Vsup 5 5 1 temp -40 125 20
+meas dc tempco max(v(vref)) - min(v(vref))
 .endc
 .end
 """
@@ -107,12 +108,14 @@ class VRefTopology(Topology):
             return m
         vref = grab_meas("vref_nom", out)
         line_reg = grab_meas("line_reg", out)
+        tempco = grab_meas("tempco", out)
         isupp = grab_meas("isupp", out)
         m.values["vref_V"] = vref
         m.values["line_reg_mV"] = line_reg * 1000 if line_reg else None
         m.values["iq_uA"] = abs(isupp) * 1e6 if isupp else None
-        m.values["tempco_ppm"] = None  # requires temp sweep — N/A in quick bench
-        m.ok = vref is not None and 1.0 < vref < 1.5
+        if tempco is not None and vref:
+            m.values["tempco_ppm"] = abs(tempco / vref) * 1e6
+        m.ok = vref is not None and 1.18 <= vref <= 1.22
         return m
 
     def emit_netlist(self, params: VRefParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:
