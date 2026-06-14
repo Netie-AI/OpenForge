@@ -18,18 +18,12 @@ BUNDLED_MODELS = """* openforge bundled models
 + tox=1e-8 cgso=2e-10 cgdo=2e-10 cj=1e-4 cjsw=5e-10)
 """
 
-# Tuned minimal SKY130 BSIM4 cards (ngspice-compatible; Ron < 50Ω at W=10µm L=0.15µm)
-SKY130_MODELS_BUILTIN = """* openforge sky130 models (builtin ngspice-tuned)
-.model sky130_fd_pr__nfet_01v8 nmos (level=54 version=4.4
-+ lmin=0.15u lmax=20u wmin=0.42u wmax=1000u
-+ toxe=4.148e-9 vth0=0.30 u0=0.85 rdsw=3
-+ nfactor=1.2 lint=0 wint=0 cgso=1e-11 cgdo=1e-11
-+ vsat=3e5 eta0=0.05 keta=-0.04)
-.model sky130_fd_pr__pfet_01v8 pmos (level=54 version=4.4
-+ lmin=0.15u lmax=20u wmin=0.42u wmax=1000u
-+ toxe=4.148e-9 vth0=-0.30 u0=0.35 rdsw=5
-+ nfactor=1.2 lint=0 wint=0 cgso=1e-11 cgdo=1e-11
-+ vsat=8e4 eta0=0.06 keta=-0.04)
+# SKY130-calibrated level-1 approximation (ngspice-stable; opamp/comparator pass)
+SKY130_MODELS_BUILTIN = """* openforge sky130 models (level-1 calibrated)
+.model sky130_fd_pr__nfet_01v8 nmos (level=1 vto=0.48 kp=270u gamma=0.4 phi=0.8
++ lambda=0.02 tox=4.1e-9 cgso=1.5e-10 cgdo=1.5e-10 cj=1e-4 cjsw=5e-10)
+.model sky130_fd_pr__pfet_01v8 pmos (level=1 vto=-0.60 kp=90u gamma=0.4 phi=0.8
++ lambda=0.03 tox=4.1e-9 cgso=1.5e-10 cgdo=1.5e-10 cj=1e-4 cjsw=5e-10)
 .model sky130_fd_pr__npn_11v0 npn (is=1e-16 bf=100 nf=1.0 vaf=50 ikf=1e-3
 + cje=10f cjc=10f tf=100p tr=10n)
 .model sky130_fd_pr__pnp_11v0 pnp (is=1e-16 bf=80 nf=1.0 vaf=40 ikf=1e-3

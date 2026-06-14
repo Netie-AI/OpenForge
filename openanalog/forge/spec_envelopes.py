@@ -21,6 +21,7 @@ DATASHEET_PARTS: dict[str, str] = {
     "switch": "RS2105",
     "charge_pump": "RS2660",
     "vref": "RS431",
+    "ldo": "RS3001",
 }
 
 # Dev-mode categories: achievable targets on bundled level-1 models (in principle).
@@ -29,6 +30,7 @@ DEV_MODE_SPECS: dict[str, str] = {
     "comparator": "type=comparator tp<1us vos<3mV iq<1uA",
     "switch": "type=switch ron<50ohm bw>10MHz ton<20ns toff<20ns",
     "charge_pump": "type=charge_pump vout=5V settle<5ms ripple<50mV",
+    "ldo": "type=ldo vout=3.3V dropout<300mV line_reg<10mV load_reg<20mV iq<100uA",
 }
 
 # Real bandgap needs SKY130 parasitic BJTs — not level-1 MOS (see AGENT_PLAN Phase 3).

@@ -34,6 +34,7 @@ class DatasetWriter:
                 "instruction": inst,
                 "input": "",
                 "output": netlist,
+                "netlist": netlist,
                 "topology": topology,
                 "measured_specs": sim_result,
                 "sim_result": sim_result,

@@ -16,8 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from openanalog.config import MODEL_SET, ROOT
-from openanalog.forge.spec_envelopes import DEV_MODE_SPECS, VREF_PHASE3_SPEC
-from openanalog.forge.topologies import REGISTRY
+from openanalog.product_line import PRODUCT_LINE, get_product, product_line_payload
 from openanalog.interface.designer import design, verify_preset
 from openanalog.llm import available_providers
 from openanalog.presets import PRESETS, presets_payload
@@ -51,40 +50,16 @@ def _git_short_hash() -> str:
 def _build_date() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-SAMPLES: dict[str, str] = {
-    "opamp": """RS321/RS358 1.1MHz Rail-to-Rail I/O CMOS Operational Amplifier
-SUPPLY RANGE: +2.2V to +5.5V  (test VS=5V)
-GAIN-BANDWIDTH PRODUCT: 1.1 MHz
-SLEW RATE: 0.5 V/us
-PHASE MARGIN: 64 deg
-AOL Open-Loop Voltage Gain: 95 100 dB (RL=10k)
-IQ Quiescent Current Per Amplifier: 60 80 uA
-""",
-    "comparator": """RS8901 Low-Power Comparator
-SUPPLY VS=5V
-Propagation Delay: 0.8 us
-Input Offset Voltage: 2.5 mV
-Quiescent Current: 0.5 uA
-""",
-    "switch": """RS2105 Analog Switch
-SUPPLY VS=5V
-On-Resistance: 25 ohm
-Bandwidth -3dB: 15 MHz
-Turn-On Time: 12 ns  Turn-Off Time: 10 ns
-""",
-    "charge_pump": """RS2660 Charge Pump
-SUPPLY VS=5V
-Output Voltage: 5.0 V
-Ripple: 30 mV
-Settling Time: 3 ms
-""",
-    "vref": """RS431 Voltage Reference
-SUPPLY VS=5V
-Reference Voltage: 1.225 V
-Line Regulation: 2 mV
-Temperature Coefficient: 50 ppm/°C
-""",
-}
+SAMPLES: dict[str, str] = {p.id: p.sample for p in PRODUCT_LINE if p.sample}
+# Topology-keyed samples for backward compat
+for p in PRODUCT_LINE:
+    if p.topology and p.topology not in SAMPLES:
+        SAMPLES[p.topology] = p.sample
+
+INLINE_SAMPLES: dict[str, str] = {p.id: p.inline_spec for p in PRODUCT_LINE}
+for p in PRODUCT_LINE:
+    if p.topology and p.topology not in INLINE_SAMPLES:
+        INLINE_SAMPLES[p.topology] = p.inline_spec
 
 METRIC_LABELS: dict[str, tuple[str, str, int]] = {
     "aol_dB": ("AOL", "dB", 1),
@@ -114,6 +89,7 @@ class DesignRequest(BaseModel):
     text: Optional[str] = None
     spec: Optional[str] = None
     category: Optional[str] = None
+    product_id: Optional[str] = None
     budget: int = 200
     use_llm: bool = True
     use_claude: bool = False
@@ -145,10 +121,13 @@ def _slim_result(result: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/api/meta")
 def api_meta() -> dict[str, Any]:
+    from openanalog.forge.topologies import REGISTRY
+
     return {
         "categories": list(REGISTRY.keys()),
+        "product_line": product_line_payload(),
         "samples": SAMPLES,
-        "inline_samples": {**DEV_MODE_SPECS, "vref": VREF_PHASE3_SPEC},
+        "inline_samples": INLINE_SAMPLES,
         "metric_labels": {
             k: {"label": v[0], "unit": v[1], "decimals": v[2]} for k, v in METRIC_LABELS.items()
         },
@@ -178,8 +157,12 @@ def api_presets() -> dict[str, Any]:
 
 
 @app.get("/api/sample")
-def sample(category: str = "opamp") -> dict[str, str]:
-    return {"category": category, "text": SAMPLES.get(category, SAMPLES["opamp"])}
+def sample(category: str = "opamp", product_id: str | None = None) -> dict[str, str]:
+    if product_id:
+        p = get_product(product_id)
+        if p:
+            return {"category": p.topology or p.id, "product_id": p.id, "text": p.sample}
+    return {"category": category, "text": SAMPLES.get(category, SAMPLES.get("opamp", ""))}
 
 
 @app.post("/api/design")
@@ -191,6 +174,7 @@ def api_design(req: DesignRequest) -> JSONResponse:
             text=req.text,
             inline_spec=req.spec,
             category=req.category,
+            product_id=req.product_id,
             budget=max(20, min(req.budget, 600)),
             use_llm=use_llm,
             llm_provider=req.llm_provider,
@@ -383,6 +367,13 @@ INDEX_HTML = r"""<!doctype html>
   .hidden{display:none}
   .sch-wrap{background:#070a0f;border:1px solid var(--line);border-radius:8px;padding:8px;max-height:480px;overflow:auto}
   .sch-wrap svg{max-width:100%;height:auto}
+  .ptype-grid{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+  .ptype{font-size:11px;padding:5px 10px;border-radius:16px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);cursor:pointer;user-select:none}
+  .ptype:hover{border-color:var(--acc2);color:var(--txt)}
+  .ptype.active{border-color:var(--acc);color:var(--acc);background:rgba(90,209,201,.08)}
+  .ptype.planned{opacity:.55;border-style:dashed}
+  .ptype .st{font-size:9px;margin-left:4px;opacity:.8}
+  .fam-label{width:100%;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -393,8 +384,9 @@ INDEX_HTML = r"""<!doctype html>
 <div class="wrap">
   <div class="panel">
     <h3>Input</h3>
-    <div class="row">
-      <span class="muted">category</span>
+    <div id="ptypeGrid" class="ptype-grid muted">Loading product types…</div>
+    <div class="row hidden" id="catRow">
+      <span class="muted">topology</span>
       <select id="cat"></select>
     </div>
     <div class="row">
@@ -464,12 +456,48 @@ INDEX_HTML = r"""<!doctype html>
 </footer>
 <script>
 const $=s=>document.querySelector(s);
-let META={}, lastNetlist='', lastResult={};
+let META={}, lastNetlist='', lastResult={}, activeProduct='opamp';
 const fmt=(v,d=2)=>v==null?'—':(typeof v==='number'?v.toFixed(d):v);
+
+function statusTag(st){
+  if(st==='available')return '';
+  if(st==='partial')return '<span class="st">β</span>';
+  return '<span class="st">soon</span>';
+}
+
+function renderProductGrid(){
+  const pl=META.product_line||{};
+  const fams=pl.families||{};
+  let html='';
+  for(const [fam, items] of Object.entries(fams)){
+    html+=`<div class="fam-label">${fam}</div>`;
+    items.forEach(p=>{
+      const cls=['ptype', p.id===activeProduct?'active':'', p.status==='planned'?'planned':''].filter(Boolean).join(' ');
+      html+=`<div class="${cls}" data-id="${p.id}" data-topo="${p.topology||''}" data-st="${p.status}" title="${p.part}">${p.label}${statusTag(p.status)}</div>`;
+    });
+  }
+  const grid=$('#ptypeGrid');
+  grid.innerHTML=html;
+  grid.querySelectorAll('.ptype').forEach(el=>el.onclick=()=>selectProduct(el.dataset.id));
+}
+
+function selectProduct(id){
+  activeProduct=id;
+  const p=(META.product_line?.products||[]).find(x=>x.id===id);
+  if(!p)return;
+  renderProductGrid();
+  if(p.topology)$('#cat').value=p.topology;
+  const planned=p.status==='planned';
+  $('#btnGo').disabled=planned;
+  $('#status').textContent=planned?`${p.label}: simulation backend coming soon`:'';
+  if(p.sample)$('#inp').value=p.sample;
+}
 
 async function loadMeta(){
   const r=await fetch('/api/meta'); META=await r.json();
   $('#cat').innerHTML=META.categories.map(c=>`<option value="${c}">${c}</option>`).join('');
+  renderProductGrid();
+  selectProduct(activeProduct);
   $('#preset').innerHTML='<option value="">— custom —</option>'+
     META.presets.map(p=>`<option value="${p.id}">${p.name}${p.expect_pass?' ✓':''}</option>`).join('');
   $('#provider').innerHTML=META.providers.map(p=>
@@ -487,12 +515,20 @@ $('#preset').onchange=()=>{
   if(p){$('#cat').value=p.category;$('#inp').value=p.spec;$('#budget').value=p.budget;$('#budgetv').textContent=p.budget;}
 };
 $('#btnSample').onclick=async()=>{
-  const cat=$('#cat').value;
-  const t=META.samples&&META.samples[cat]; if(t)$('#inp').value=t;
+  const t=META.samples&&META.samples[activeProduct];
+  if(t)$('#inp').value=t;
+  else{
+    const cat=$('#cat').value;
+    const s=META.samples&&META.samples[cat]; if(s)$('#inp').value=s;
+  }
 };
 $('#btnInline').onclick=()=>{
-  const cat=$('#cat').value;
-  const t=META.inline_samples&&META.inline_samples[cat]; if(t)$('#inp').value=t;
+  const t=META.inline_samples&&META.inline_samples[activeProduct];
+  if(t)$('#inp').value=t;
+  else{
+    const cat=$('#cat').value;
+    const s=META.inline_samples&&META.inline_samples[cat]; if(s)$('#inp').value=s;
+  }
 };
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -548,7 +584,7 @@ async function runDesign(){
   if(!txt){$('#status').textContent='enter text';return;}
   const isInline=/[<>=]/.test(txt)&&txt.length<200&&!/\n/.test(txt);
   const body={budget:+$('#budget').value,use_llm:$('#useLlm').checked,category:$('#cat').value,
-    llm_provider:$('#provider').value,model_set:$('#modelset').value};
+    product_id:activeProduct,llm_provider:$('#provider').value,model_set:$('#modelset').value};
   if(isInline)body.spec=txt; else body.text=txt;
   $('#btnGo').disabled=true; $('#status').textContent='designing…';
   try{

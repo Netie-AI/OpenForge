@@ -19,6 +19,7 @@ from openanalog.eda.schematic import render_svg
 from openanalog.forge.sizer import Candidate, size
 from openanalog.forge.topologies import get_topology
 from openanalog.interface.datasheet import detect_category, parse_inline_spec, parse_intent
+from openanalog.product_line import get_product, resolve_product
 
 
 def candidate_to_result(spec: dict[str, Any], cand: Candidate, topology) -> dict[str, Any]:
@@ -54,6 +55,7 @@ def design(
     inline_spec: str | None = None,
     spec: dict[str, Any] | None = None,
     category: str | None = None,
+    product_id: str | None = None,
     budget: int = 200,
     use_claude: bool = False,
     use_llm: bool | None = None,
@@ -64,15 +66,26 @@ def design(
     progress: Callable[[int, int, float], None] | None = None,
     record_kg: bool = True,
 ) -> dict[str, Any]:
+    product = resolve_product(product_id=product_id, category=category, text=text)
+    if product and product.status == "planned":
+        raise ValueError(
+            f"{product.label} ({product.part}) is on the Runic roadmap — "
+            f"simulation backend not ready yet. "
+            f"Available now: op-amp, precision op-amp, comparator, analog switch, "
+            f"charge pump, voltage reference."
+        )
+
+    effective_category = category or (product.topology if product else None)
+
     if spec is None:
         if inline_spec:
-            spec = parse_inline_spec(inline_spec, category=category)
+            spec = parse_inline_spec(inline_spec, category=effective_category)
         elif text:
             if use_llm is None:
                 use_llm = use_claude
             spec = parse_intent(
                 text,
-                category=category,
+                category=effective_category,
                 use_llm=use_llm,
                 provider=llm_provider,
                 model=llm_model,
@@ -80,8 +93,12 @@ def design(
         else:
             raise ValueError("Provide text, inline_spec, or spec")
 
-    if category:
-        spec["circuit_type"] = category
+    if effective_category:
+        spec["circuit_type"] = effective_category
+    if product:
+        spec.setdefault("product_id", product.id)
+        spec.setdefault("product_label", product.label)
+        spec.setdefault("part", product.part)
 
     circuit_type = spec.get("circuit_type", "opamp")
     try:

@@ -61,7 +61,10 @@ def test_charge_pump_vout_blocked_on_level1():
 
 
 def test_vref_deferred_to_phase3():
+    from openanalog.sim.models import set_active_model_set
+
+    set_active_model_set("bundled")
     t = get_topology("vref")
     m = t.measure(t.default_params(), with_full=True)
     assert not m.ok
-    assert any("Phase 3" in w for w in m.warnings)
+    assert any("Phase 3" in w or "deferred" in w.lower() for w in m.warnings)

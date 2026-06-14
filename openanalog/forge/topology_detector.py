@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-_BENCH_TOPOLOGIES = frozenset({"opamp", "comparator", "switch", "charge_pump"})
+_BENCH_TOPOLOGIES = frozenset({"opamp", "comparator", "switch", "charge_pump", "ldo"})
 
 _MOS_RE = re.compile(
     r"^\s*([Mm]\w+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+",

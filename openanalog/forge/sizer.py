@@ -168,7 +168,7 @@ def size(
     pool: list[Candidate] = []
     best: Candidate | None = None
     explore = max(1, int(budget * 0.6))
-    topk_n = {"opamp": 5, "comparator": 6, "switch": 5, "charge_pump": 4}.get(
+    topk_n = {"opamp": 5, "comparator": 6, "switch": 5, "charge_pump": 4, "ldo": 5}.get(
         topology.circuit_type, 3
     )
 

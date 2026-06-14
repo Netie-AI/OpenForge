@@ -119,6 +119,8 @@ def get_topology(circuit_type: str) -> Topology:
         "voltage_reference": "vref",
         "reference": "vref",
         "bandgap": "vref",
+        "ldo": "ldo",
+        "linear_regulator": "ldo",
     }
     key = aliases.get(key, key)
     if key not in REGISTRY:

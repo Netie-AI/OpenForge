@@ -10,13 +10,23 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_CATEGORY_KEYWORDS: list[tuple[str, list[str]]] = [
-    ("comparator", ["comparator", "compare", "rs890", "lm2903", "lm393"]),
-    ("switch", ["analog switch", "transmission gate", "rs2105", "rs2227", "analog mux"]),
-    ("charge_pump", ["charge pump", "dickson", "voltage doubler", "inverting charge"]),
-    ("vref", ["voltage reference", "bandgap", "vref", "reference voltage", "shunt reference"]),
-    ("opamp", ["operational amplifier", "op-amp", "op amp", "opamp", "ota"]),
-]
+def _category_keywords() -> list[tuple[str, list[str]]]:
+    """Build keyword list from product catalog + legacy aliases."""
+    from openanalog.product_line import PRODUCT_LINE
+
+    rows: list[tuple[str, list[str]]] = []
+    for p in PRODUCT_LINE:
+        if not p.topology:
+            continue
+        kws = list(p.keywords)
+        if p.part:
+            kws.append(p.part.lower())
+        rows.append((p.topology, kws))
+    # Deduplicate by topology — merge keywords
+    merged: dict[str, list[str]] = {}
+    for topo, kws in rows:
+        merged.setdefault(topo, []).extend(kws)
+    return list(merged.items())
 
 _DEFAULT_MODES: dict[str, dict[str, str]] = {
     "opamp": {
@@ -31,6 +41,10 @@ _DEFAULT_MODES: dict[str, dict[str, str]] = {
     },
     "charge_pump": {
         "vout_V": "target", "ripple_mV": "max", "settle_ms": "max", "iout_mA": "min", "iq_uA": "max",
+    },
+    "ldo": {
+        "vout_V": "target", "dropout_mV": "max", "line_reg_mV": "max",
+        "load_reg_mV": "max", "iq_uA": "max", "psrr_dB": "min",
     },
     "vref": {
         "vref_V": "target", "line_reg_mV": "max", "tempco_ppm": "max", "iq_uA": "max",
@@ -67,6 +81,14 @@ _INLINE_PATTERNS: dict[str, dict[str, str]] = {
         "iout_mA": r"iout\s*([<>=]?)\s*([\d.]+)\s*mA",
         "iq_uA": r"iq\s*([<>=]?)\s*([\d.]+)\s*uA",
     },
+    "ldo": {
+        "vout_V": r"vout\s*[=]?\s*([\d.]+)\s*V",
+        "dropout_mV": r"dropout\s*([<>=]?)\s*([\d.]+)\s*mV",
+        "line_reg_mV": r"line[_\s-]*reg\s*([<>=]?)\s*([\d.]+)\s*mV",
+        "load_reg_mV": r"load[_\s-]*reg\s*([<>=]?)\s*([\d.]+)\s*mV",
+        "iq_uA": r"iq\s*([<>=]?)\s*([\d.]+)\s*uA",
+        "psrr_dB": r"psrr\s*([<>=]?)\s*([\d.]+)\s*dB",
+    },
     "vref": {
         "vref_V": r"vref\s*[=]?\s*([\d.]+)\s*V",
         "line_reg_mV": r"line[_\s-]*reg\s*([<>=]?)\s*([\d.]+)\s*mV",
@@ -90,17 +112,34 @@ def _search(pattern: str, text: str, group: int = 1) -> float | None:
 
 def detect_category(text: str) -> str:
     """Keyword-based circuit category detection. Falls back to opamp."""
+    from openanalog.product_line import resolve_product
+
     lower = text.lower()
     tm = re.search(r"type\s*=\s*([a-z_]+)", lower)
     if tm:
         raw = tm.group(1).replace("-", "_")
         aliases = {
-            "op_amp": "opamp", "operational_amplifier": "opamp",
-            "analog_switch": "switch", "voltage_reference": "vref", "reference": "vref",
+            "op_amp": "opamp",
+            "operational_amplifier": "opamp",
+            "analog_switch": "switch",
+            "voltage_reference": "vref",
+            "reference": "vref",
+            "precision_opamp": "opamp",
+            "hs_switch": "switch",
+            "logic_switch": "switch",
         }
-        return aliases.get(raw, raw)
+        mapped = aliases.get(raw, raw)
+        prod = resolve_product(product_id=raw) or resolve_product(category=mapped)
+        if prod and prod.topology:
+            return prod.topology
+        if mapped in ("level_translator", "logic_ic", "adc", "dac", "controller", "lcd_controller"):
+            return mapped
+        return mapped
+    prod = resolve_product(text=text)
+    if prod and prod.topology:
+        return prod.topology
     scores: dict[str, int] = {}
-    for cat, kws in _CATEGORY_KEYWORDS:
+    for cat, kws in _category_keywords():
         for kw in kws:
             if kw in lower:
                 scores[cat] = scores.get(cat, 0) + len(kw)
@@ -241,12 +280,43 @@ def extract_vref_specs_regex(text: str) -> dict[str, Any]:
     }
 
 
+def extract_ldo_specs_regex(text: str) -> dict[str, Any]:
+    vout = _search(r"output[^\n]*?([\d.]+)\s*V", text) or _search(r"vout[^\n]*?([\d.]+)\s*V", text)
+    dropout = _search(r"dropout[^\n]*?([\d.]+)\s*mV", text)
+    line_reg = _search(r"line\s*regulation[^\n]*?([\d.]+)\s*mV", text)
+    load_reg = _search(r"load\s*regulation[^\n]*?([\d.]+)\s*mV", text)
+    iq = _search(r"quiescent\s*current[^\n]*?([\d.]+)", text)
+    psrr = _search(r"psrr[^\n]*?([\d.]+)\s*dB", text)
+    raw = {
+        "vout_V": vout or 3.3,
+        "dropout_mV": dropout or 300.0,
+        "line_reg_mV": line_reg or 10.0,
+        "load_reg_mV": load_reg or 20.0,
+        "iq_uA": iq,
+        "psrr_dB": psrr,
+    }
+    targets = {
+        k: {"value": float(v), "mode": _DEFAULT_MODES["ldo"].get(k, "target")}
+        for k, v in raw.items()
+        if v is not None
+    }
+    return {
+        "circuit_type": "ldo",
+        "supply_V": _supply_V(text),
+        "targets": targets,
+        "part": _part_name(text),
+        "source": "regex",
+        "notes": [],
+    }
+
+
 _EXTRACTORS = {
     "opamp": extract_opamp_specs_regex,
     "comparator": extract_comparator_specs_regex,
     "switch": extract_switch_specs_regex,
     "charge_pump": extract_charge_pump_specs_regex,
     "vref": extract_vref_specs_regex,
+    "ldo": extract_ldo_specs_regex,
 }
 
 

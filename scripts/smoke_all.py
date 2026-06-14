@@ -24,12 +24,14 @@ CATEGORY_BUDGET: dict[str, int] = {
     "comparator": max(BUDGET, 200),
     "switch": max(BUDGET, 150),
     "charge_pump": max(BUDGET, 120),
+    "ldo": max(BUDGET, 180),
 }
 CATEGORY_SEED: dict[str, int] = {
     "opamp": 42,
     "comparator": 7,
     "switch": 11,
     "charge_pump": 19,
+    "ldo": 23,
 }
 
 if DEFERRED:
