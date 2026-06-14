@@ -6,20 +6,50 @@ FastAPI web UI — backend-driven chat-to-chip interface.
 
 from __future__ import annotations
 
+import subprocess
+import threading
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from openanalog.config import MODEL_SET
+from openanalog.config import MODEL_SET, ROOT
 from openanalog.forge.spec_envelopes import DEV_MODE_SPECS, VREF_PHASE3_SPEC
 from openanalog.forge.topologies import REGISTRY
 from openanalog.interface.designer import design, verify_preset
 from openanalog.llm import available_providers
-from openanalog.presets import presets_payload
+from openanalog.presets import PRESETS, presets_payload
 
 app = FastAPI(title="OpenForge EDA")
+
+_test_suite_lock = threading.Lock()
+_test_suite_state: dict[str, Any] = {
+    "running": False,
+    "results": [],
+    "started_at": None,
+    "finished_at": None,
+    "model_set": None,
+    "error": None,
+}
+
+
+def _git_short_hash() -> str:
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return out.strip()
+    except Exception:
+        return "unknown"
+
+
+def _build_date() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 SAMPLES: dict[str, str] = {
     "opamp": """RS321/RS358 1.1MHz Rail-to-Rail I/O CMOS Operational Amplifier
@@ -128,6 +158,11 @@ def api_meta() -> dict[str, Any]:
         ],
         "model_sets": ["bundled", "sky130"],
         "default_model_set": MODEL_SET,
+        "version": {
+            "git_hash": _git_short_hash(),
+            "build_date": _build_date(),
+            "pdk_mode": MODEL_SET,
+        },
         **presets_payload(),
     }
 
@@ -171,11 +206,88 @@ def api_design(req: DesignRequest) -> JSONResponse:
 
 @app.post("/api/verify")
 def api_verify(req: VerifyRequest) -> JSONResponse:
+    global _last_result
     try:
         out = verify_preset(req.preset_id, model_set=req.model_set)
+        # Re-run design so schematic/kicad endpoints have payload
+        from openanalog.presets import get_preset
+
+        p = get_preset(req.preset_id)
+        if p:
+            _last_result = design(
+                inline_spec=p.spec,
+                category=p.category,
+                budget=p.budget,
+                seed=p.seed,
+                use_llm=False,
+                model_set=req.model_set,
+                record_kg=False,
+            )
         return JSONResponse(out)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+def _run_test_suite(model_set: str | None) -> None:
+    global _test_suite_state
+    results: list[dict[str, Any]] = []
+    try:
+        for p in PRESETS:
+            out = verify_preset(p.id, model_set=model_set)
+            row = {
+                "preset_id": p.id,
+                "preset_name": p.name,
+                "category": p.category,
+                "expect_pass": p.expect_pass,
+                "passed": out["passed"],
+                "meets_all": out["meets_all"],
+                "score": out["score"],
+                "compliance": out.get("compliance", {}),
+                "model_set": out.get("model_set", model_set or MODEL_SET),
+            }
+            results.append(row)
+        with _test_suite_lock:
+            _test_suite_state["results"] = results
+            _test_suite_state["running"] = False
+            _test_suite_state["finished_at"] = datetime.now(timezone.utc).isoformat()
+            _test_suite_state["error"] = None
+    except Exception as e:
+        with _test_suite_lock:
+            _test_suite_state["running"] = False
+            _test_suite_state["error"] = str(e)
+            _test_suite_state["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+class TestSuiteRequest(BaseModel):
+    model_set: Optional[str] = None
+
+
+@app.get("/api/test-presets")
+def api_test_presets_status() -> dict[str, Any]:
+    with _test_suite_lock:
+        return dict(_test_suite_state)
+
+
+@app.post("/api/test-presets")
+def api_test_presets_run(req: TestSuiteRequest) -> JSONResponse:
+    global _test_suite_state
+    with _test_suite_lock:
+        if _test_suite_state["running"]:
+            return JSONResponse({"error": "test suite already running"}, status_code=409)
+        _test_suite_state = {
+            "running": True,
+            "results": [],
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": None,
+            "model_set": req.model_set or MODEL_SET,
+            "error": None,
+        }
+    threading.Thread(
+        target=_run_test_suite,
+        args=(req.model_set,),
+        daemon=True,
+    ).start()
+    return JSONResponse({"started": True, "preset_count": len(PRESETS)})
 
 
 @app.get("/api/schematic.svg")
@@ -323,6 +435,7 @@ INDEX_HTML = r"""<!doctype html>
         <div class="tab" data-t="devices">Devices</div>
         <div class="tab" data-t="eda">KiCad</div>
         <div class="tab" data-t="netlist">Netlist</div>
+        <div class="tab" data-t="testsuite">Test Suite</div>
       </div>
       <div id="tab-compliance"></div>
       <div id="tab-schematic" class="hidden"><div class="sch-wrap" id="sch"></div></div>
@@ -336,9 +449,19 @@ INDEX_HTML = r"""<!doctype html>
         </div>
         <pre id="netlist"></pre>
       </div>
+      <div id="tab-testsuite" class="hidden">
+        <div class="row">
+          <button class="ghost" id="btnRunAll">Run All Presets</button>
+          <span id="suiteStatus" class="muted"></span>
+        </div>
+        <div id="suiteTable"></div>
+      </div>
     </div>
   </div>
 </div>
+<footer style="text-align:center;padding:10px;color:var(--dim);font-size:11px;border-top:1px solid var(--line)">
+  <span id="footerVer">OpenForge</span>
+</footer>
 <script>
 const $=s=>document.querySelector(s);
 let META={}, lastNetlist='', lastResult={};
@@ -352,6 +475,10 @@ async function loadMeta(){
   $('#provider').innerHTML=META.providers.map(p=>
     `<option value="${p.id}" ${!p.available?'disabled':''}>${p.label}${p.available?'':' (no key)'}</option>`).join('');
   if(META.default_model_set) $('#modelset').value=META.default_model_set;
+  if(META.version){
+    $('#footerVer').textContent=`PDK: ${$('#modelset').value} · git ${META.version.git_hash} · ${META.version.build_date}`;
+  }
+  renderSuiteTable(META.presets||[]);
 }
 $('#budget').oninput=e=>$('#budgetv').textContent=e.target.value;
 $('#preset').onchange=()=>{
@@ -370,7 +497,7 @@ $('#btnInline').onclick=()=>{
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
-  ['compliance','schematic','devices','eda','netlist'].forEach(n=>$('#tab-'+n).classList.add('hidden'));
+  ['compliance','schematic','devices','eda','netlist','testsuite'].forEach(n=>$('#tab-'+n).classList.add('hidden'));
   $('#tab-'+t.dataset.t).classList.remove('hidden');
 });
 
@@ -463,6 +590,48 @@ $('#btnVerify').onclick=runVerify;
 $('#btnCopy').onclick=()=>navigator.clipboard.writeText(lastNetlist);
 $('#btnDl').onclick=()=>window.open('/api/netlist','_blank');
 $('#btnKicad').onclick=()=>window.open('/api/kicad_sch','_blank');
+
+function renderSuiteTable(presets, results){
+  const byId={};
+  (results||[]).forEach(r=>byId[r.preset_id]=r);
+  let rows='<table><tr><th>Preset</th><th>Category</th><th>Expect</th><th>Result</th><th>Score</th><th>Specs</th></tr>';
+  presets.forEach(p=>{
+    const r=byId[p.id];
+    const pass=r?(r.passed?'ok':'bad'):'';
+    const lbl=r?(r.passed?'PASS':'FAIL'):'—';
+    let specs='';
+    if(r&&r.compliance){
+      specs=Object.entries(r.compliance).map(([k,v])=>{
+        const c=v.pass===true?'ok':v.pass===false?'bad':'';
+        return `<span class="badge ${c}" style="margin:1px">${k}</span>`;
+      }).join(' ');
+    }
+    rows+=`<tr><td>${p.name}</td><td>${p.category}</td><td>${p.expect_pass}</td>
+      <td><span class="badge ${pass}">${lbl}</span></td>
+      <td>${r?fmt(r.score,3):'—'}</td><td>${specs||'—'}</td></tr>`;
+  });
+  rows+='</table>';
+  $('#suiteTable').innerHTML=rows;
+}
+
+let suitePoll=null;
+async function pollSuite(){
+  const r=await fetch('/api/test-presets'); const j=await r.json();
+  $('#suiteStatus').textContent=j.running?'running…':(j.error?'error: '+j.error:'done '+ (j.finished_at||''));
+  if(j.results&&j.results.length) renderSuiteTable(META.presets||[], j.results);
+  if(!j.running){clearInterval(suitePoll);suitePoll=null;$('#btnRunAll').disabled=false;}
+}
+
+$('#btnRunAll').onclick=async()=>{
+  $('#btnRunAll').disabled=true;
+  $('#suiteStatus').textContent='starting…';
+  await fetch('/api/test-presets',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model_set:$('#modelset').value})});
+  if(suitePoll)clearInterval(suitePoll);
+  suitePoll=setInterval(pollSuite,2000);
+  pollSuite();
+};
+
 loadMeta();
 </script>
 </body>
