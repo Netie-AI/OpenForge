@@ -1,4 +1,4 @@
-"""Dickson charge pump topology."""
+"""Dickson charge pump topology with bootstrapped NMOS switches."""
 
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
-
-
 from openanalog.sim.models import resolve_models, mos_line
 
 
@@ -22,63 +20,20 @@ from openanalog.sim.models import resolve_models, mos_line
 class ChargePumpParams:
     stages: int = 2
     cap_F: float = 100e-9
+    cap_boot_F: float = 0.0  # 0 → auto cap_F / 4
     freq_Hz: float = 500e3
-    rload_ohm: float = 10e3
-    w_switch: float = 50.0
+    rload_ohm: float = 100e3
+    w_switch: float = 80.0
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
 
-
-def _build_diode_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
-    stages = max(2, min(int(p.stages), 4))
-    period = 1.0 / p.freq_Hz
-    half = period / 2.0
-    tstep = period / 200.0
-    tstop = period * 400.0
-
-    # Dickson ladder anchored at vdd (not a floating n0 node).
-    cap_lines = [f"C1 vdd n1 {p.cap_F}"]
-    for i in range(2, stages + 1):
-        cap_lines.append(f"C{i} n{i-1} n{i} {p.cap_F}")
-    cap_lines.append(f"Cout n{stages} 0 {p.cap_F * 2}")
-
-    diode_lines = []
-    for i in range(stages):
-        clk = f"clk{(i % 2) + 1}"
-        left = "vdd" if i == 0 else f"n{i}"
-        diode_lines.append(f"D{i} {left} {clk} Dmod")
-        diode_lines.append(f"D{i}b {clk} n{i+1} Dmod")
-
-    body = "\n".join(
-        [
-            f"* OpenForge Dickson charge pump ({stages} stages)",
-            f"Vsup vdd 0 {supply_V}",
-            f"Vclk1 clk1 0 pulse(0 {supply_V} 0 1n 1n {half} {period})",
-            f"Vclk2 clk2 0 pulse(0 {supply_V} {half} 1n 1n {half} {period})",
-            ".model Dmod D (IS=1e-14 N=1.2 RS=2)",
-            *diode_lines,
-            *cap_lines,
-            f"Rload n{stages} 0 {p.rload_ohm}",
-            ".control",
-            "set filetype=ascii",
-            f"tran {tstep} {tstop}",
-            f"meas tran vout_avg avg v(n{stages}) from={tstop * 0.7} to={tstop}",
-            f"meas tran ripple_pp pp v(n{stages}) from={tstop * 0.7} to={tstop}",
-            f"meas tran isupp_avg avg i(vsup) from={tstop * 0.7} to={tstop}",
-            f"meas tran settle when v(n{stages})={supply_V * 0.8} rise=1",
-            "print isupp_avg",
-            "print vout_avg",
-            "print ripple_pp",
-            ".endc",
-            ".end",
-        ]
-    )
-    return body
+    def bootstrap_cap_F(self) -> float:
+        return self.cap_boot_F if self.cap_boot_F > 0 else self.cap_F / 4
 
 
-def _build_mos_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
-    """NMOS-switch Dickson for SKY130 (clk-gated pass FETs, no diode Vf)."""
+def _build_bootstrapped_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
+    """Bootstrapped NMOS Dickson — gate driven above VDD to eliminate Vth drop."""
     ms = resolve_models()
     stages = max(2, min(int(p.stages), 4))
     period = 1.0 / p.freq_Hz
@@ -86,37 +41,50 @@ def _build_mos_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
     tstep = period / 200.0
     tstop = period * 400.0
     w = p.w_switch
+    cap_boot = p.bootstrap_cap_F()
+    l_switch = "0.18u" if ms.model_set == "sky130" else "0.5u"
+    vout_node = f"n{stages}"
 
     cap_lines = [f"Cfly1 vdd n1 {p.cap_F}"]
     for i in range(2, stages + 1):
         cap_lines.append(f"Cfly{i} n{i-1} n{i} {p.cap_F}")
-    cap_lines.append(f"Cout n{stages} 0 {p.cap_F * 2}")
+    cap_lines.append(f"Cout {vout_node} 0 {p.cap_F * 2}")
 
-    switch_lines = []
+    switch_lines: list[str] = []
+    boot_lines: list[str] = []
     for i in range(stages):
-        clk = f"clk{(i % 2) + 1}"
+        clk_boot = f"clk{((i + 1) % 2) + 1}"
         left = "vdd" if i == 0 else f"n{i}"
-        nxt = f"n{i+1}"
-        # Pass FET: conducts when clk high (left -> nxt)
-        switch_lines.append(mos_line(f"sw{i}", left, clk, nxt, "0", "n", w=f"{w}u", l="0.5u", ms=ms))
+        right = f"n{i + 1}"
+        gn = f"gn{i}"
+        bulk = "vdd" if i == 0 else left
+        # NMOS pass: source=low rail, drain=pumped node (D→S when Vgs > Vth)
+        switch_lines.append(
+            mos_line(f"n{i}", right, gn, left, bulk, "n", w=f"{w}u", l=l_switch, ms=ms)
+        )
+        boot_lines.append(f"Cboot{i} {gn} {clk_boot} {cap_boot}")
+        boot_lines.append(f"Dboot{i} {left} {gn} Dmod")
 
+    settle_thresh = min(4.5, supply_V * 0.9)
     body = "\n".join(
         [
-            f"* OpenForge NMOS Dickson ({stages} stages, SKY130)",
+            f"* OpenForge bootstrapped NMOS Dickson ({stages} stages)",
             ms.block,
             f"Vsup vdd 0 {supply_V}",
             f"Vclk1 clk1 0 pulse(0 {supply_V} 0 1n 1n {half} {period})",
             f"Vclk2 clk2 0 pulse(0 {supply_V} {half} 1n 1n {half} {period})",
+            ".model Dmod D (IS=1e-14 N=1)",
+            *boot_lines,
             *switch_lines,
             *cap_lines,
-            f"Rload n{stages} 0 {p.rload_ohm}",
+            f"Rload {vout_node} 0 {p.rload_ohm}",
             ".control",
             "set filetype=ascii",
             f"tran {tstep} {tstop}",
-            f"meas tran vout_avg avg v(n{stages}) from={tstop * 0.7} to={tstop}",
-            f"meas tran ripple_pp pp v(n{stages}) from={tstop * 0.7} to={tstop}",
+            f"meas tran vout_avg avg v({vout_node}) from={tstop * 0.7} to={tstop}",
+            f"meas tran ripple_pp pp v({vout_node}) from={tstop * 0.7} to={tstop}",
             f"meas tran isupp_avg avg i(vsup) from={tstop * 0.7} to={tstop}",
-            f"meas tran settle when v(n{stages})={supply_V * 0.9} rise=1",
+            f"meas tran settle when v({vout_node})={settle_thresh} rise=1",
             "print isupp_avg",
             "print vout_avg",
             "print ripple_pp",
@@ -128,9 +96,7 @@ def _build_mos_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
 
 
 def _build_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
-    if resolve_models().model_set == "sky130":
-        return _build_mos_tran_deck(p, supply_V)
-    return _build_diode_tran_deck(p, supply_V)
+    return _build_bootstrapped_tran_deck(p, supply_V)
 
 
 class ChargePumpTopology(Topology):
@@ -142,15 +108,14 @@ class ChargePumpTopology(Topology):
         return ChargePumpParams()
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
-        ranges = {
+        return {
             "stages": (2.0, 4.0, False),
             "cap_F": (10e-9, 500e-9, True),
+            "cap_boot_F": (5e-9, 250e-9, True),
             "freq_Hz": (100e3, 3e6, True),
             "rload_ohm": (5e3, 100e3, True),
+            "w_switch": (20.0, 200.0, True),
         }
-        if resolve_models().model_set == "sky130":
-            ranges["w_switch"] = (20.0, 200.0, True)
-        return ranges
 
     def measurable_specs(self) -> set[str]:
         return {"vout_V", "ripple_mV", "settle_ms", "iout_mA", "iq_uA"}
@@ -161,8 +126,10 @@ class ChargePumpTopology(Topology):
         params = ChargePumpParams(
             stages=max(2, int(params.stages)),
             cap_F=max(params.cap_F, 10e-9),
+            cap_boot_F=max(params.cap_boot_F, 0.0),
             freq_Hz=max(params.freq_Hz, 10e3),
             rload_ohm=max(params.rload_ohm, 1e3),
+            w_switch=max(params.w_switch, 10.0),
         )
         m = TopologyMetrics()
         ok, out = run_ngspice(_build_tran_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 45))
@@ -191,6 +158,8 @@ class ChargePumpTopology(Topology):
         return [
             {"name": "stages", "role": "Dickson stages", "value": int(p["stages"])},
             {"name": "Cpump", "role": "pump cap", "value": f"{p['cap_F']*1e9:.1f} nF"},
+            {"name": "Cboot", "role": "bootstrap cap", "value": f"{params.bootstrap_cap_F()*1e9:.1f} nF"},
+            {"name": "Wswitch", "role": "NMOS width", "value": f"{p['w_switch']:.0f} µm"},
             {"name": "fclk", "role": "clock", "value": f"{p['freq_Hz']/1e3:.1f} kHz"},
             {"name": "Rload", "role": "load", "value": f"{p['rload_ohm']/1e3:.1f} kOhm"},
         ]

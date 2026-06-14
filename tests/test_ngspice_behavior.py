@@ -51,13 +51,11 @@ def test_switch_ron_blocked_on_level1():
     assert ron is not None and ron > 50
 
 
-def test_charge_pump_vout_blocked_on_level1():
-    """Dickson diode ladder cannot close 5V target from 5V rail on level-1 diodes."""
+def test_charge_pump_meets_datasheet_bar():
     result = _design("charge_pump")
-    if result["meets_all"]:
-        return
-    vout = result["metrics"].get("vout_V")
-    assert vout is not None and vout < 4.75
+    assert result["meets_all"], {
+        k: v for k, v in result["compliance"].items() if v.get("pass") is False
+    }
 
 
 def test_vref_deferred_to_phase3():
