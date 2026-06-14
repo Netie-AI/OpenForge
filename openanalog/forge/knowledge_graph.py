@@ -99,6 +99,36 @@ class KnowledgeGraph:
             self.g.add_edge(parent_id, nid, type="evolved_from")
         return nid
 
+    def add_product_node(self, product: dict[str, Any]) -> str:
+        """Create or update a public Product node (datasheet facts only)."""
+        part_id = product["part_id"]
+        nid = f"product_{part_id}"
+        self.g.add_node(
+            nid,
+            node_type="Product",
+            **{k: v for k, v in product.items() if k != "part_id"},
+            part_id=part_id,
+        )
+        return nid
+
+    def link_generated_circuit(
+        self,
+        product_part_id: str,
+        circuit_node_id: str,
+        *,
+        measured_specs: dict[str, Any] | None = None,
+    ) -> None:
+        """Link a forge winner / design to a Product spec via GENERATED_BY."""
+        pid = f"product_{product_part_id}"
+        if not self.g.has_node(pid):
+            return
+        self.g.add_edge(
+            circuit_node_id,
+            pid,
+            type="GENERATED_BY",
+            measured_specs=measured_specs or {},
+        )
+
     def _archive_weakest(self, topology: str, *, key: str = "topology") -> None:
         nodes = [
             (n, d.get("fitness_pass_rate", 0))
