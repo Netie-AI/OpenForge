@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from openanalog.forge.topologies.base import BUNDLED_MODELS, NMOS, PMOS
+from openanalog.sim.models import BUNDLED_MODELS, NMOS, PMOS
 from openanalog.forge.topologies.opamp import (
     OpAmpParams,
     OpAmpTopology,

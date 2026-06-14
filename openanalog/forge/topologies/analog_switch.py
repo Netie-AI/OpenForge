@@ -7,15 +7,13 @@ from typing import Any
 
 from openanalog.config import NGSPICE_TIMEOUT
 from openanalog.forge.topologies.base import (
-    BUNDLED_MODELS,
-    NMOS,
-    PMOS,
     Topology,
     TopologyMetrics,
     grab_meas,
     register,
     run_ngspice,
 )
+from openanalog.sim.models import ResolvedModels, resolve_models
 
 
 @dataclass
@@ -37,18 +35,24 @@ def _params_block(p: SwitchParams, supply_V: float) -> str:
 .param WDRV={p.Wdrv}u LENDRV={p.len_drv}u
 """
 
-_CORE = f"""
+
+def _core(ms: ResolvedModels) -> str:
+    # SKY130: use explicit bulk ties for pass devices
+    n_bulk = "0" if ms.model_set == "bundled" else "sig"
+    p_bulk = "vdd" if ms.model_set == "bundled" else "sig"
+    return f"""
 VSUP vdd 0 {{VDD}}
-Mn out sig ctrl sig {NMOS} W={{WN}} L={{LENN}}
-Mp sig out ctrl_n sig {PMOS} W={{WP}} L={{LENP}}
-Mnd ctrl_n ctrl 0 0 {NMOS} W={{WDRV}} L={{LENDRV}}
-Mpd ctrl_n ctrl vdd vdd {PMOS} W={{WDRV}} L={{LENDRV}}
+Mn out sig ctrl {n_bulk} {ms.nmos} W={{WN}} L={{LENN}}
+Mp sig out ctrl_n {p_bulk} {ms.pmos} W={{WP}} L={{LENP}}
+Mnd ctrl_n ctrl 0 0 {ms.nmos} W={{WDRV}} L={{LENDRV}}
+Mpd ctrl_n ctrl vdd vdd {ms.pmos} W={{WDRV}} L={{LENDRV}}
 Rload out 0 1k
 Cload out 0 10p
 """
 
 
 def _build_dc_deck(p: SwitchParams, supply_V: float) -> str:
+    ms = resolve_models()
     harness = """
 Vctrl ctrl 0 {VDD}
 Vsig sig 0 dc 2.5
@@ -63,10 +67,11 @@ print isupp
 .endc
 .end
 """
-    return "* Switch DC RON\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
+    return "* Switch DC RON\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
 
 
 def _build_ac_deck(p: SwitchParams, supply_V: float) -> str:
+    ms = resolve_models()
     harness = """
 Vctrl ctrl 0 {VDD}
 Vsig sig 0 dc 2.5 ac 1
@@ -78,10 +83,11 @@ meas ac bw_hz when vdb(out)=dbdc-3 cross=1
 .endc
 .end
 """
-    return "* Switch AC BW\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
+    return "* Switch AC BW\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
 
 
 def _build_tran_deck(p: SwitchParams, supply_V: float) -> str:
+    ms = resolve_models()
     vmid = supply_V / 2.0
     harness = f"""
 Vctrl ctrl 0 pulse(0 {supply_V} 500n 100p 100p 2u 5u)
@@ -94,7 +100,7 @@ meas tran toff trig v(ctrl) val={supply_V * 0.5} fall=1 targ v(out) val={vmid * 
 .endc
 .end
 """
-    return "* Switch tran\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
+    return "* Switch tran\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
 
 
 class AnalogSwitchTopology(Topology):
@@ -106,9 +112,13 @@ class AnalogSwitchTopology(Topology):
         return SwitchParams()
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
+        ms = resolve_models()
+        w_max = 8000.0 if ms.model_set == "sky130" else 4000.0
         return {
-            "Wn": (20.0, 2000.0, True), "Wp": (40.0, 4000.0, True),
-            "len_n": (0.18, 1.0, False), "len_p": (0.18, 1.0, False),
+            "Wn": (20.0, w_max, True),
+            "Wp": (40.0, w_max * 2, True),
+            "len_n": (0.18, 1.0, False),
+            "len_p": (0.18, 1.0, False),
             "Wdrv": (10.0, 300.0, True),
         }
 
@@ -145,7 +155,8 @@ class AnalogSwitchTopology(Topology):
         return m
 
     def emit_netlist(self, params: SwitchParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:
-        return "* OpenForge analog switch\n" + BUNDLED_MODELS + _params_block(params, supply_V) + _CORE + "\n.end\n"
+        ms = resolve_models()
+        return "* OpenForge analog switch\n" + ms.block + _params_block(params, supply_V) + _core(ms) + "\n.end\n"
 
     def device_list(self, params: SwitchParams) -> list[dict[str, Any]]:
         p = params.as_dict()

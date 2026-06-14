@@ -7,15 +7,13 @@ from typing import Any
 
 from openanalog.config import NGSPICE_TIMEOUT
 from openanalog.forge.topologies.base import (
-    BUNDLED_MODELS,
-    NMOS,
-    PMOS,
     Topology,
     TopologyMetrics,
     grab_meas,
     register,
     run_ngspice,
 )
+from openanalog.sim.models import ResolvedModels, resolve_models
 
 
 @dataclass
@@ -39,17 +37,18 @@ class OpAmpParams:
         return self.__dict__.copy()
 
 
-_CORE = f"""
+def _core(ms: ResolvedModels) -> str:
+    return f"""
 VSUP vdd 0 {{VDD}}
 Iref vdd nb {{IREF}}
-M8 nb nb 0 0 {NMOS} W={{Wb}} L={{Lb}}
-M5 tail nb 0 0 {NMOS} W={{W5}} L={{L5}}
-M7 vout nb 0 0 {NMOS} W={{W7}} L={{L7}}
-M1 n1    vinp tail 0 {NMOS} W={{W1}} L={{L1}}
-M2 nout1 vinn tail 0 {NMOS} W={{W1}} L={{L1}}
-M3 n1    n1 vdd vdd {PMOS} W={{W3}} L={{L3}}
-M4 nout1 n1 vdd vdd {PMOS} W={{W3}} L={{L3}}
-M6 vout nout1 vdd vdd {PMOS} W={{W6}} L={{L6}}
+M8 nb nb 0 0 {ms.nmos} W={{Wb}} L={{Lb}}
+M5 tail nb 0 0 {ms.nmos} W={{W5}} L={{L5}}
+M7 vout nb 0 0 {ms.nmos} W={{W7}} L={{L7}}
+M1 n1    vinp tail 0 {ms.nmos} W={{W1}} L={{L1}}
+M2 nout1 vinn tail 0 {ms.nmos} W={{W1}} L={{L1}}
+M3 n1    n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
+M4 nout1 n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
+M6 vout nout1 vdd vdd {ms.pmos} W={{W6}} L={{L6}}
 Cc vout nout1 {{CC}}
 CL vout 0 {{CLOAD}}
 """
@@ -91,7 +90,8 @@ meas ac ph_ugf   find vp(vout) when vdb(vout)=0
 .endc
 .end
 """
-    return "* OpenForge op-amp AC\n" + BUNDLED_MODELS + _params_block(p, supply_V, cload_F) + _CORE + harness
+    ms = resolve_models()
+    return "* OpenForge op-amp AC\n" + ms.block + _params_block(p, supply_V, cload_F) + _core(ms) + harness
 
 
 def _build_tran_deck(p: OpAmpParams, supply_V: float, cload_F: float) -> str:
@@ -108,7 +108,8 @@ meas tran tr_rise trig v(vout) val={lo + 0.1 * (hi - lo)} rise=1 targ v(vout) va
 .endc
 .end
 """
-    return "* OpenForge op-amp tran\n" + BUNDLED_MODELS + _params_block(p, supply_V, cload_F) + _CORE + harness
+    ms = resolve_models()
+    return "* OpenForge op-amp tran\n" + ms.block + _params_block(p, supply_V, cload_F) + _core(ms) + harness
 
 
 class OpAmpTopology(Topology):
@@ -168,8 +169,9 @@ class OpAmpTopology(Topology):
         return m
 
     def emit_netlist(self, params: OpAmpParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:
+        ms = resolve_models()
         tb = "\nVcm vinn 0 {VCM}\nVac sigin 0 dc {VCM} ac 1\nLfb vout vinp 1T\nCin vinp sigin 1T\n.end\n"
-        return "* OpenForge two-stage Miller op-amp\n" + BUNDLED_MODELS + _params_block(params, supply_V, cload_F) + _CORE + tb
+        return "* OpenForge two-stage Miller op-amp\n" + ms.block + _params_block(params, supply_V, cload_F) + _core(ms) + tb
 
     def device_list(self, params: OpAmpParams) -> list[dict[str, Any]]:
         p = params.as_dict()

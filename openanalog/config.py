@@ -25,6 +25,23 @@ CHECKPOINT = DATA_DIR / "checkpoint.json"
 FORGE_STATE = DATA_DIR / "forge_state.json"
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+SEA_LION_API_KEY = os.getenv("SEA_LION_API_KEY", "")
+
+# LLM routing — upgrade models via env without code changes
+OPENFORGE_LLM_PROVIDER = os.getenv("OPENFORGE_LLM_PROVIDER", "openrouter")
+OPENFORGE_LLM_MODEL = os.getenv("OPENFORGE_LLM_MODEL", "")
+OPENFORGE_GPT_MODEL = os.getenv("OPENFORGE_GPT_MODEL", "openai/gpt-4.1")
+OPENFORGE_CLAUDE_MODEL = os.getenv("OPENFORGE_CLAUDE_MODEL", "claude-sonnet-4-20250514")
+OPENFORGE_GROQ_MODEL = os.getenv("OPENFORGE_GROQ_MODEL", "llama-3.3-70b-versatile")
+OPENFORGE_SEA_LION_MODEL = os.getenv("OPENFORGE_SEA_LION_MODEL", "aisingapore/Llama-3.1-SEA-LION-8B-R")
+
+# PDK model set: bundled (fast/dev) | sky130 (silicon-plausible)
+MODEL_SET = os.getenv("OPENFORGE_MODEL_SET", "bundled").lower()
+PDK_DIR = DATA_DIR / "pdk" / "sky130"
+
 NGSPICE_TIMEOUT = int(os.getenv("NGSPICE_TIMEOUT", "30"))
 SIM_WORKERS = int(os.getenv("SIM_WORKERS", "4"))
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")

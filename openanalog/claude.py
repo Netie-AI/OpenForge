@@ -1,52 +1,22 @@
 from __future__ import annotations
 
-import base64
 import json
-import re
 from pathlib import Path
 from typing import Any
 
-from openanalog.config import ANTHROPIC_API_KEY
+from openanalog import llm
+from openanalog.config import OPENFORGE_CLAUDE_MODEL
 
-MODEL = "claude-sonnet-4-20250514"
-
-
-def _client():
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY not set in .env or env.local")
-    import anthropic
-
-    return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-
-def _parse_json(text: str) -> dict[str, Any]:
-    text = text.strip()
-    m = re.search(r"\{[\s\S]*\}", text)
-    if m:
-        return json.loads(m.group())
-    return json.loads(text)
+# Backward-compatible default model name
+MODEL = OPENFORGE_CLAUDE_MODEL
 
 
 def ask_json(system: str, user: str, *, image_path: Path | None = None) -> dict[str, Any]:
-    client = _client()
-    content: list[dict[str, Any]] = [{"type": "text", "text": user}]
-    if image_path and image_path.exists():
-        media = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
-        b64 = base64.standard_b64encode(image_path.read_bytes()).decode()
-        content = [
-            {
-                "type": "image",
-                "source": {"type": "base64", "media_type": media, "data": b64},
-            },
-            {"type": "text", "text": user},
-        ]
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        system=system,
-        messages=[{"role": "user", "content": content}],
-    )
-    return _parse_json(msg.content[0].text)
+    """Delegate to multi-provider router; prefer Anthropic when available."""
+    data = llm.ask_json(system, user, provider="anthropic", image_path=image_path)
+    data.pop("_llm_provider", None)
+    data.pop("_llm_model", None)
+    return data
 
 
 def reexamine_ambiguous(
@@ -96,31 +66,17 @@ def extract_nearby_params(context: str) -> dict[str, Any]:
 
 
 def schematic_to_spice(image_path: Path) -> str:
-    client = _client()
-    media = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
-    b64 = base64.standard_b64encode(image_path.read_bytes()).decode()
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=8192,
-        system=(
+    text, _, _ = llm.ask_text(
+        (
             "You are an expert analog IC designer. Convert schematic to SPICE netlist.\n"
             "Rules: unique node names (net_001...), ground=0, sky130 W/L, .model NMOS/PMOS, end with .end\n"
             "Output ONLY raw SPICE netlist."
         ),
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {"type": "base64", "media_type": media, "data": b64},
-                    },
-                    {"type": "text", "text": "Convert to SPICE netlist."},
-                ],
-            }
-        ],
+        "Convert to SPICE netlist.",
+        provider="anthropic",
+        image_path=image_path,
     )
-    return msg.content[0].text.strip()
+    return text.strip()
 
 
 def review_netlist(circuit_type: str, netlist: str, sim_result: dict[str, Any]) -> dict[str, Any]:

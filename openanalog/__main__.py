@@ -85,27 +85,33 @@ app.add_typer(forge_app, name="forge")
 def design_cmd(
     datasheet: Optional[Path] = typer.Option(None, "--datasheet", help="Datasheet text/PDF file"),
     spec: Optional[str] = typer.Option(None, "--spec", help='Inline spec e.g. "type=comparator tp<1us vos<3mV iq<1uA"'),
-    text: Optional[str] = typer.Option(None, "--text", help="Raw datasheet text"),
-    category: Optional[str] = typer.Option(None, "--category", help="Circuit category override (opamp, comparator, switch, charge_pump, vref)"),
+    text: Optional[str] = typer.Option(None, "--text", help="Raw datasheet text or natural language"),
+    category: Optional[str] = typer.Option(None, "--category", help="Circuit category override"),
     budget: int = typer.Option(200, "--budget", help="Sizing search evaluations"),
-    use_claude: bool = typer.Option(False, "--use-claude", help="Use Claude for datasheet extraction"),
+    use_claude: bool = typer.Option(False, "--use-claude", help="Use LLM for extraction"),
+    use_llm: bool = typer.Option(False, "--use-llm", help="Use LLM for NL/datasheet parsing"),
+    llm_provider: Optional[str] = typer.Option(None, "--llm-provider", help="LLM provider (openrouter, anthropic, groq)"),
+    model_set: Optional[str] = typer.Option(None, "--model-set", help="bundled or sky130"),
     out: Optional[Path] = typer.Option(None, "--out", help="Write netlist to this .sp file"),
+    sch_out: Optional[Path] = typer.Option(None, "--sch-out", help="Write KiCad schematic .kicad_sch"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Extract+show specs only, no sizing"),
 ):
     from rich.table import Table
     from openanalog.interface.designer import design
-    from openanalog.interface.datasheet import extract_specs, parse_inline_spec
+    from openanalog.interface.datasheet import parse_intent, parse_inline_spec
 
     ensure_dirs()
     src_text = text
     if datasheet and datasheet.exists():
         src_text = datasheet.read_text(encoding="utf-8", errors="ignore")
 
+    use_llm_flag = use_llm or use_claude
+
     if dry_run:
         if spec:
             parsed = parse_inline_spec(spec, category=category)
         elif src_text:
-            parsed = extract_specs(src_text, use_claude=use_claude, category=category)
+            parsed = parse_intent(src_text, category=category, use_llm=use_llm_flag, provider=llm_provider)
         else:
             typer.echo("Provide --datasheet, --text, or --spec")
             raise typer.Exit(2)
@@ -113,24 +119,18 @@ def design_cmd(
         raise typer.Exit()
 
     from rich.console import Console
-    from rich.progress import Progress
 
     console = Console()
-    cat_label = category or "auto"
-    with Progress(console=console) as prog:
-        task = prog.add_task(f"Sizing ({cat_label})", total=budget)
-
-        def cb(i, total, best):
-            prog.update(task, completed=i, description=f"Sizing ({cat_label}) best={best:.3f}")
-
-        result = design(
-            text=src_text,
-            inline_spec=spec,
-            category=category,
-            budget=budget,
-            use_claude=use_claude,
-            progress=cb,
-        )
+    result = design(
+        text=src_text,
+        inline_spec=spec,
+        category=category,
+        budget=budget,
+        use_llm=use_llm_flag,
+        llm_provider=llm_provider,
+        model_set=model_set,
+        progress=None,
+    )
 
     sp = result["spec"]
     console.print(f"\n[bold]Part:[/bold] {sp.get('part','?')}  "
@@ -165,9 +165,71 @@ def design_cmd(
     if out:
         out.write_text(result["netlist"], encoding="utf-8")
         console.print(f"[dim]netlist -> {out}[/dim]")
-    else:
+    if sch_out:
+        sch_out.write_text(result.get("kicad_sch", ""), encoding="utf-8")
+        console.print(f"[dim]schematic -> {sch_out}[/dim]")
+    if not out:
         console.print("\n[bold]Netlist:[/bold]")
         console.print(result["netlist"])
+
+
+@app.command("presets")
+def presets_cmd(
+    category: Optional[str] = typer.Option(None, "--category"),
+):
+    """List design presets (each is also a test case)."""
+    from rich.table import Table
+    from openanalog.presets import list_presets
+
+    table = Table(title="OpenForge presets")
+    table.add_column("id")
+    table.add_column("name")
+    table.add_column("category")
+    table.add_column("expect_pass")
+    table.add_column("spec")
+    for p in list_presets(category=category):
+        table.add_row(p.id, p.name, p.category, str(p.expect_pass), p.spec[:60])
+    from rich.console import Console
+    Console().print(table)
+
+
+@app.command("test-presets")
+def test_presets_cmd(
+    preset_id: Optional[str] = typer.Option(None, "--preset", help="Run one preset only"),
+    model_set: Optional[str] = typer.Option(None, "--model-set"),
+):
+    """Run preset verification against ngspice (Test & Verify)."""
+    from rich.console import Console
+    from rich.table import Table
+    from openanalog.interface.designer import verify_preset
+    from openanalog.presets import PRESETS, get_preset
+
+    console = Console()
+    targets = [get_preset(preset_id)] if preset_id else PRESETS
+    targets = [p for p in targets if p is not None]
+    if not targets:
+        typer.echo(f"Unknown preset: {preset_id}")
+        raise typer.Exit(1)
+
+    table = Table(title="Preset verification")
+    table.add_column("preset")
+    table.add_column("expect")
+    table.add_column("meets_all")
+    table.add_column("result")
+    failed = 0
+    for p in targets:
+        out = verify_preset(p.id, model_set=model_set)
+        ok = out["passed"]
+        if not ok:
+            failed += 1
+        table.add_row(
+            p.name,
+            str(p.expect_pass),
+            str(out["meets_all"]),
+            "[green]PASS[/green]" if ok else "[red]FAIL[/red]",
+        )
+    console.print(table)
+    raise typer.Exit(1 if failed else 0)
 
 
 @app.command("serve")

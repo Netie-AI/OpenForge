@@ -36,3 +36,8 @@ spice-datasets/
 symbench-athens-client/
 symbench-studio/
 data/seeds/Masala-CHAI/
+data/pdk/
+*.kicad_sch
+data/seeds_normalized.jsonl.bak
+data/seeds_normalized.renorm.jsonl
+papers/inbox/*.pdf

@@ -7,15 +7,13 @@ from typing import Any
 
 from openanalog.config import NGSPICE_TIMEOUT
 from openanalog.forge.topologies.base import (
-    BUNDLED_MODELS,
-    NMOS,
-    PMOS,
     Topology,
     TopologyMetrics,
     grab_meas,
     register,
     run_ngspice,
 )
+from openanalog.sim.models import ResolvedModels, resolve_models
 
 
 @dataclass
@@ -50,17 +48,18 @@ def _params_block(p: ComparatorParams, supply_V: float) -> str:
 .param RLOAD={p.Rload}
 """
 
-_CORE = f"""
+def _core(ms: ResolvedModels) -> str:
+    return f"""
 VSUP vdd 0 {{VDD}}
 Iref vdd nb {{IREF}}
-M8 nb nb 0 0 {NMOS} W={{Wb}} L={{Lb}}
-M5 tail nb 0 0 {NMOS} W={{W5}} L={{L5}}
-M7 vout nb 0 0 {NMOS} W={{W7}} L={{L7}}
-M1 n1    vinp tail 0 {NMOS} W={{W1}} L={{L1}}
-M2 nout1 vinn tail 0 {NMOS} W={{W1}} L={{L1}}
-M3 n1    n1 vdd vdd {PMOS} W={{W3}} L={{L3}}
-M4 nout1 n1 vdd vdd {PMOS} W={{W3}} L={{L3}}
-M6 vout nout1 vdd vdd {PMOS} W={{W6}} L={{L6}}
+M8 nb nb 0 0 {ms.nmos} W={{Wb}} L={{Lb}}
+M5 tail nb 0 0 {ms.nmos} W={{W5}} L={{L5}}
+M7 vout nb 0 0 {ms.nmos} W={{W7}} L={{L7}}
+M1 n1    vinp tail 0 {ms.nmos} W={{W1}} L={{L1}}
+M2 nout1 vinn tail 0 {ms.nmos} W={{W1}} L={{L1}}
+M3 n1    n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
+M4 nout1 n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
+M6 vout nout1 vdd vdd {ms.pmos} W={{W6}} L={{L6}}
 Rload vout 0 {{RLOAD}}
 """
 
@@ -77,7 +76,8 @@ print isupp
 .endc
 .end
 """
-    return "* Comparator OP\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
+    ms = resolve_models()
+    return "* Comparator OP\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
 
 
 def _build_vos_deck(p: ComparatorParams, supply_V: float) -> str:
@@ -95,7 +95,8 @@ meas dc vos find v(vinp) when v(vout)={mid} cross=1
 .endc
 .end
 """
-    return "* Comparator Vos\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
+    ms = resolve_models()
+    return "* Comparator Vos\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
 
 
 def _build_tran_deck(p: ComparatorParams, supply_V: float) -> str:
@@ -116,7 +117,8 @@ meas tran tfall trig v(vout) val={supply_V * 0.2} rise=1 targ v(vout) val={suppl
 .endc
 .end
 """
-    return "* Comparator tran\n" + BUNDLED_MODELS + _params_block(p, supply_V) + _CORE + harness
+    ms = resolve_models()
+    return "* Comparator tran\n" + ms.block + _params_block(p, supply_V) + _core(ms) + harness
 
 
 class ComparatorTopology(Topology):
@@ -167,7 +169,8 @@ class ComparatorTopology(Topology):
         return m
 
     def emit_netlist(self, params: ComparatorParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:
-        return "* OpenForge comparator\n" + BUNDLED_MODELS + _params_block(params, supply_V) + _CORE + "\n.end\n"
+        ms = resolve_models()
+        return "* OpenForge comparator\n" + ms.block + _params_block(params, supply_V) + _core(ms) + "\n.end\n"
 
     def device_list(self, params: ComparatorParams) -> list[dict[str, Any]]:
         p = params.as_dict()

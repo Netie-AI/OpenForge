@@ -1,10 +1,6 @@
 """
-Voltage reference — DEFERRED to Phase 3 (SKY130 PDK).
-
-A real ~1.2 V bandgap comes from silicon junction physics (V_BE + PTAT).
-Bundled level-1 MOSFET models have no BJT, no meaningful tempco, and a
-hard-coded VTO — they cannot produce a trustworthy absolute reference.
-Do not fake 1.2 V with diode-connected MOS or resistor dividers in dev mode.
+Voltage reference — bandgap on SKY130 parasitic BJTs (Phase 3).
+Deferred on bundled level-1 MOSFET models.
 """
 
 from __future__ import annotations
@@ -12,38 +8,83 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from openanalog.config import NGSPICE_TIMEOUT
 from openanalog.forge.topologies.base import (
     Topology,
     TopologyMetrics,
+    grab_meas,
     register,
+    run_ngspice,
 )
+from openanalog.sim.models import resolve_models
 
 _PHASE3_MSG = (
-    "vref deferred to Phase 3: requires SKY130 (or similar) parasitic BJTs. "
-    "Bundled level-1 MOSFET models cannot validate absolute Vref, line reg, or tempco."
+    "vref deferred on bundled models: requires SKY130 parasitic BJTs. "
+    "Set OPENFORGE_MODEL_SET=sky130 to enable bandgap reference."
 )
 
 
 @dataclass
 class VRefParams:
-    """Placeholder params until SKY130 bandgap topology lands."""
-
-    stub: float = 1.0
+    r1_ohm: float = 12000.0
+    r2_ohm: float = 10000.0
+    ibias_uA: float = 5.0
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
 
 
+def _params_block(p: VRefParams, supply_V: float) -> str:
+    return f""".param VDD={supply_V}
+.param R1={p.r1_ohm}
+.param R2={p.r2_ohm}
+.param IBIAS={p.ibias_uA}u
+"""
+
+
+def _build_bandgap_deck(p: VRefParams, supply_V: float) -> str:
+    """Simple PTAT + VBE bandgap using SKY130 parasitic BJTs."""
+    ms = resolve_models()
+    body = f"""
+* OpenForge SKY130 bandgap reference
+Vsup vdd 0 {supply_V}
+Ibias vdd n_bias {{IBIAS}}
+Q1 n1 0 0 0 {ms.npn} area=8
+Q2 n2 n1 0 0 {ms.npn} area=1
+Rptat n2 n3 {{R1}}
+Rdiv n3 0 {{R2}}
+Rfb vref n2 2000
+M1 vref n3 vdd vdd {ms.pmos} W=20u L=0.5u
+M2 n_bias n_bias 0 0 {ms.nmos} W=4u L=0.5u
+Cout vref 0 10p
+.control
+set filetype=ascii
+op
+let isupp = abs(i(vsup))
+print isupp
+dc Vsup 3 5.5 0.1
+meas dc vref_nom find v(vref) when v(vdd)=5
+meas dc line_reg max(v(vref)) - min(v(vref))
+.endc
+.end
+"""
+    return ms.block + _params_block(p, supply_V) + body
+
+
 class VRefTopology(Topology):
     circuit_type = "vref"
-    topology_name = "deferred_bandgap_phase3"
+    topology_name = "sky130_bandgap"
     spec_weights = {"vref_V": 2.0, "line_reg_mV": 1.5, "tempco_ppm": 1.0, "iq_uA": 1.0}
 
     def default_params(self) -> VRefParams:
         return VRefParams()
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
-        return {}
+        return {
+            "r1_ohm": (5000.0, 50000.0, True),
+            "r2_ohm": (5000.0, 50000.0, True),
+            "ibias_uA": (1.0, 20.0, True),
+        }
 
     def measurable_specs(self) -> set[str]:
         return {"vref_V", "line_reg_mV", "tempco_ppm", "iq_uA"}
@@ -52,16 +93,44 @@ class VRefTopology(Topology):
         self, params: VRefParams, *, supply_V: float = 5.0, cload_F: float = 10e-12, with_full: bool = True
     ) -> TopologyMetrics:
         m = TopologyMetrics()
-        m.warnings.append(_PHASE3_MSG)
-        m.error = _PHASE3_MSG
-        m.ok = False
+        ms = resolve_models()
+        if ms.model_set != "sky130":
+            m.warnings.append(_PHASE3_MSG)
+            m.error = _PHASE3_MSG
+            m.ok = False
+            return m
+
+        ok, out = run_ngspice(_build_bandgap_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 30))
+        m.raw = out[-3000:]
+        if not ok:
+            m.error = out[:800]
+            return m
+        vref = grab_meas("vref_nom", out)
+        line_reg = grab_meas("line_reg", out)
+        isupp = grab_meas("isupp", out)
+        m.values["vref_V"] = vref
+        m.values["line_reg_mV"] = line_reg * 1000 if line_reg else None
+        m.values["iq_uA"] = abs(isupp) * 1e6 if isupp else None
+        m.values["tempco_ppm"] = None  # requires temp sweep — N/A in quick bench
+        m.ok = vref is not None and 1.0 < vref < 1.5
         return m
 
     def emit_netlist(self, params: VRefParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:
-        return f"* {_PHASE3_MSG}\n.end\n"
+        ms = resolve_models()
+        if ms.model_set != "sky130":
+            return f"* {_PHASE3_MSG}\n.end\n"
+        return _build_bandgap_deck(params, supply_V).replace(".control", "* .control").replace(".endc", "* .endc")
 
     def device_list(self, params: VRefParams) -> list[dict[str, Any]]:
-        return [{"name": "—", "role": "deferred to Phase 3 (SKY130)", "value": ""}]
+        ms = resolve_models()
+        if ms.model_set != "sky130":
+            return [{"name": "—", "role": "deferred (bundled)", "value": ""}]
+        p = params.as_dict()
+        return [
+            {"name": "Q1/Q2", "role": "parasitic BJT pair", "value": "SKY130 NPN"},
+            {"name": "Rptat", "role": "PTAT resistor", "value": f"{p['r1_ohm']/1000:.1f} kΩ"},
+            {"name": "Rdiv", "role": "divider", "value": f"{p['r2_ohm']/1000:.1f} kΩ"},
+        ]
 
     def package_hint(self, spec: dict[str, Any] | None = None) -> str:
         return "SOT23-5"

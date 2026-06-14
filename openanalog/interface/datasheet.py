@@ -250,35 +250,111 @@ _EXTRACTORS = {
 }
 
 
-def extract_with_claude(text: str, *, category: str = "opamp") -> dict[str, Any]:
-    from openanalog import claude
+def extract_with_llm(
+    text: str,
+    *,
+    category: str = "opamp",
+    provider: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    from openanalog import llm
 
     schema_hint = (
-        f"Extract {category} design targets from this datasheet text. Output JSON ONLY:\n"
+        f"Extract {category} design targets from this text. Output JSON ONLY:\n"
         '{"circuit_type":"' + category + '","supply_V":float,"part":str,"targets":{...}}\n'
-        "Each target: {\"value\":float,\"mode\":\"min|max|target\"}. Omit unknown targets.\n\n"
+        'Each target key uses metric names like gbp_MHz, pm_deg, aol_dB, iq_uA, tp_us, '
+        'vos_mV, ron_ohm, bw_MHz, vout_V, vref_V, ripple_mV, settle_ms.\n'
+        'Each target: {"value":float,"mode":"min|max|target"}. Omit unknown targets.\n\n'
         + text[:12000]
     )
-    data = claude.ask_json("You extract analog IC specs. JSON only.", schema_hint)
+    data = llm.ask_json(
+        "You extract analog IC design specs from natural language or datasheets. JSON only.",
+        schema_hint,
+        provider=provider,
+        model=model,
+    )
+    data.pop("_llm_provider", None)
+    data.pop("_llm_model", None)
     data.setdefault("circuit_type", category)
     data.setdefault("supply_V", 5.0)
     data.setdefault("targets", {})
-    data["source"] = "claude"
+    data["source"] = provider or "llm"
     data.setdefault("notes", [])
     return data
 
 
-def extract_specs(text: str, *, use_claude: bool = False, category: str | None = None) -> dict[str, Any]:
-    cat = category or detect_category(text)
-    if use_claude:
-        try:
-            return extract_with_claude(text, category=cat)
-        except Exception as e:
-            spec = _EXTRACTORS.get(cat, extract_opamp_specs_regex)(text)
-            spec["notes"].append(f"claude extraction failed ({e}); used regex")
+def extract_with_claude(text: str, *, category: str = "opamp") -> dict[str, Any]:
+    return extract_with_llm(text, category=category, provider="anthropic")
+
+
+def _looks_like_inline_spec(text: str) -> bool:
+    t = text.strip()
+    if len(t) > 240 or "\n" in t:
+        return False
+    return bool(re.search(r"[<>=]", t)) and bool(
+        re.search(r"(gbp|pm|aol|iq|tp|vos|ron|bw|vout|vref|type=)", t, re.I)
+    )
+
+
+def parse_intent(
+    text: str,
+    *,
+    category: str | None = None,
+    use_llm: bool = True,
+    provider: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    """
+    Parse free-form natural language, inline spec, or datasheet text into a design spec.
+    """
+    t = text.strip()
+    if not t:
+        raise ValueError("Empty input")
+
+    if _looks_like_inline_spec(t):
+        return parse_inline_spec(t, category=category)
+
+    cat = category or detect_category(t)
+    # Long text with datasheet keywords → regex first (fast, offline)
+    if len(t) > 400 or re.search(
+        r"(datasheet|electrical\s+characteristics|quiescent\s+current|gain[\s-]*bandwidth)",
+        t,
+        re.I,
+    ):
+        spec = _EXTRACTORS.get(cat, extract_opamp_specs_regex)(t)
+        if spec.get("targets"):
             return spec
+
+    if use_llm:
+        try:
+            return extract_with_llm(t, category=cat, provider=provider, model=model)
+        except Exception as e:
+            spec = _EXTRACTORS.get(cat, extract_opamp_specs_regex)(t)
+            spec.setdefault("notes", []).append(f"LLM extraction failed ({e}); used regex")
+            return spec
+
     fn = _EXTRACTORS.get(cat, extract_opamp_specs_regex)
-    return fn(text)
+    return fn(t)
+
+
+def extract_specs(
+    text: str,
+    *,
+    use_claude: bool = False,
+    use_llm: bool | None = None,
+    category: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    if use_llm is None:
+        use_llm = use_claude
+    return parse_intent(
+        text,
+        category=category,
+        use_llm=use_llm,
+        provider=provider,
+        model=model,
+    )
 
 
 def parse_inline_spec(s: str, *, category: str | None = None) -> dict[str, Any]:

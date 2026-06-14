@@ -16,7 +16,7 @@ from typing import Any
 
 from openanalog.config import NGSPICE_TIMEOUT, resolve_ngspice_cmd
 
-from openanalog.sim.models import BUNDLED_MODELS, NMOS, PMOS
+from openanalog.sim.models import ResolvedModels, resolve_models, set_active_model_set
 
 
 @dataclass

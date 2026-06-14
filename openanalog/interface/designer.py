@@ -11,11 +11,14 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from openanalog.config import DATA_DIR
+from openanalog.config import DATA_DIR, MODEL_SET
+from openanalog.sim.models import set_active_model_set
 from openanalog.eda.footprints import attach_eda_metadata
+from openanalog.eda.kicad_sch import emit_kicad_sch
+from openanalog.eda.schematic import render_svg
 from openanalog.forge.sizer import Candidate, size
 from openanalog.forge.topologies import get_topology
-from openanalog.interface.datasheet import detect_category, extract_specs, parse_inline_spec
+from openanalog.interface.datasheet import detect_category, parse_inline_spec, parse_intent
 
 
 def candidate_to_result(spec: dict[str, Any], cand: Candidate, topology) -> dict[str, Any]:
@@ -53,6 +56,10 @@ def design(
     category: str | None = None,
     budget: int = 200,
     use_claude: bool = False,
+    use_llm: bool | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    model_set: str | None = None,
     seed: int = 1,
     progress: Callable[[int, int, float], None] | None = None,
     record_kg: bool = True,
@@ -61,8 +68,15 @@ def design(
         if inline_spec:
             spec = parse_inline_spec(inline_spec, category=category)
         elif text:
-            cat = category or detect_category(text)
-            spec = extract_specs(text, use_claude=use_claude, category=cat)
+            if use_llm is None:
+                use_llm = use_claude
+            spec = parse_intent(
+                text,
+                category=category,
+                use_llm=use_llm,
+                provider=llm_provider,
+                model=llm_model,
+            )
         else:
             raise ValueError("Provide text, inline_spec, or spec")
 
@@ -79,9 +93,16 @@ def design(
     if not spec.get("targets"):
         raise ValueError("No design targets could be extracted from the input")
 
+    active_model_set = (model_set or MODEL_SET).lower()
+    spec["model_set"] = active_model_set
+    set_active_model_set(active_model_set)
+
     cand = size(topology, spec, budget=budget, seed=seed, progress=progress)
     result = candidate_to_result(spec, cand, topology)
+    result["model_set"] = active_model_set
     result = attach_eda_metadata(result)
+    result["schematic_svg"] = render_svg(result)
+    result["kicad_sch"] = emit_kicad_sch(result)
 
     if record_kg:
         try:
@@ -90,6 +111,38 @@ def design(
             result["warnings"].append(f"KG record skipped: {e}")
     _log_design(result)
     return result
+
+
+def verify_preset(preset_id: str, *, model_set: str | None = None) -> dict[str, Any]:
+    """Run a named preset and return pass/fail vs expect_pass."""
+    from openanalog.presets import get_preset
+
+    preset = get_preset(preset_id)
+    if not preset:
+        raise ValueError(f"Unknown preset: {preset_id}")
+
+    result = design(
+        inline_spec=preset.spec,
+        category=preset.category,
+        budget=preset.budget,
+        seed=preset.seed,
+        use_llm=False,
+        model_set=model_set,
+        record_kg=False,
+        progress=None,
+    )
+    passed = result["meets_all"] == preset.expect_pass
+    return {
+        "preset_id": preset.id,
+        "preset_name": preset.name,
+        "expect_pass": preset.expect_pass,
+        "meets_all": result["meets_all"],
+        "passed": passed,
+        "score": result["score"],
+        "category": result["category"],
+        "compliance": result["compliance"],
+        "model_set": result.get("model_set", MODEL_SET),
+    }
 
 
 def _record_kg(result: dict[str, Any]) -> None:
