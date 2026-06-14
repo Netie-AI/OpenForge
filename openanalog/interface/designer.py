@@ -33,7 +33,10 @@ def candidate_to_result(spec: dict[str, Any], cand: Candidate, topology) -> dict
         "score": round(cand.score, 4),
         "metrics": cand.metrics.as_dict(),
         "compliance": cand.per_spec,
-        "params": {k: round(v, 5) if isinstance(v, float) else v for k, v in cand.params.as_dict().items()},
+        "params": {
+            k: (round(v, 9) if isinstance(v, float) else v)
+            for k, v in cand.params.as_dict().items()
+        },
         "devices": topology.device_list(cand.params),
         "netlist": netlist,
         "warnings": list(cand.metrics.warnings),

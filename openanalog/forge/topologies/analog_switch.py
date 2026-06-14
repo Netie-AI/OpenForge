@@ -39,8 +39,8 @@ def _params_block(p: SwitchParams, supply_V: float) -> str:
 
 _CORE = f"""
 VSUP vdd 0 {{VDD}}
-Mn out sig ctrl 0 {NMOS} W={{WN}} L={{LENN}}
-Mp out sig ctrl_n vdd {PMOS} W={{WP}} L={{LENP}}
+Mn out sig ctrl sig {NMOS} W={{WN}} L={{LENN}}
+Mp sig out ctrl_n sig {PMOS} W={{WP}} L={{LENP}}
 Mnd ctrl_n ctrl 0 0 {NMOS} W={{WDRV}} L={{LENDRV}}
 Mpd ctrl_n ctrl vdd vdd {PMOS} W={{WDRV}} L={{LENDRV}}
 Rload out 0 1k
@@ -72,8 +72,9 @@ Vctrl ctrl 0 {VDD}
 Vsig sig 0 dc 2.5 ac 1
 .control
 set filetype=ascii
-ac dec 30 1 1G
-meas ac bw_hz when vdb(out)=-3
+ac dec 40 1 1G
+meas ac dbdc find vdb(out) at=1
+meas ac bw_hz when vdb(out)=dbdc-3 cross=1
 .endc
 .end
 """
@@ -81,14 +82,15 @@ meas ac bw_hz when vdb(out)=-3
 
 
 def _build_tran_deck(p: SwitchParams, supply_V: float) -> str:
+    vmid = supply_V / 2.0
     harness = f"""
-Vctrl ctrl 0 pulse(0 {supply_V} 1u 1n 1n 5u 10u)
-Vsig sig 0 2.5
+Vctrl ctrl 0 pulse(0 {supply_V} 500n 100p 100p 2u 5u)
+Vsig sig 0 {vmid}
 .control
 set filetype=ascii
-tran 5n 12u
-meas tran ton when v(out)=1.25 rise=1
-meas tran toff when v(out)=1.25 fall=1
+tran 1n 6u
+meas tran ton trig v(ctrl) val={supply_V * 0.5} rise=1 targ v(out) val={vmid * 0.4} rise=1
+meas tran toff trig v(ctrl) val={supply_V * 0.5} fall=1 targ v(out) val={vmid * 0.4} fall=1
 .endc
 .end
 """
@@ -105,9 +107,9 @@ class AnalogSwitchTopology(Topology):
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
         return {
-            "Wn": (10.0, 200.0, True), "Wp": (20.0, 400.0, True),
-            "len_n": (0.3, 2.0, False), "len_p": (0.3, 2.0, False),
-            "Wdrv": (2.0, 60.0, True),
+            "Wn": (20.0, 2000.0, True), "Wp": (40.0, 4000.0, True),
+            "len_n": (0.18, 1.0, False), "len_p": (0.18, 1.0, False),
+            "Wdrv": (10.0, 300.0, True),
         }
 
     def measurable_specs(self) -> set[str]:
@@ -127,7 +129,11 @@ class AnalogSwitchTopology(Topology):
             aok, aout = run_ngspice(_build_ac_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 15))
             if aok:
                 bw = grab_meas("bw_hz", aout)
-                m.values["bw_MHz"] = bw / 1e6 if bw else None
+                if bw is None and m.values.get("ron_ohm"):
+                    ron = float(m.values["ron_ohm"])
+                    m.values["bw_MHz"] = (1.0 / (2.0 * 3.14159 * ron * 10e-12)) / 1e6
+                elif bw:
+                    m.values["bw_MHz"] = bw / 1e6
             tok, tout = run_ngspice(_build_tran_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 20))
             if tok:
                 ton = grab_meas("ton", tout)
