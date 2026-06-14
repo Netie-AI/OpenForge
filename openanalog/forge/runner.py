@@ -13,7 +13,7 @@ from openanalog.config import FORGE_STATE, SEEDS_NORMALIZED, ensure_dirs
 from openanalog.forge.dataset_writer import DatasetWriter
 from openanalog.forge.forge_eval import evaluate_topology_params
 from openanalog.forge.knowledge_graph import KnowledgeGraph
-from openanalog.forge.param_mutator import apply_seed_hints, mutate_params
+from openanalog.forge.param_mutator import apply_seed_hints, mutate_params, opamp_warm_start_params
 from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
 from openanalog.forge.topologies import get_topology
 from openanalog.ingestion.converter import extract_params
@@ -99,12 +99,22 @@ def _save_forge_state(state: dict[str, Any]) -> None:
     FORGE_STATE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
-def _forge_worker(args: tuple[str, dict[str, float], str, int]) -> dict[str, Any] | None:
-    category, seed_hints, seed_id, generation = args
+def _forge_worker(args: tuple[str, dict[str, float], str, int, int]) -> dict[str, Any] | None:
+    category, seed_hints, seed_id, generation, total_n = args
     try:
         topology = get_topology(category)
-        base = apply_seed_hints(topology.default_params(), seed_hints, topology)
-        mutated = mutate_params(topology, base, seed=generation)
+        if category == "opamp":
+            base = topology.params_from_dict(opamp_warm_start_params())
+        else:
+            base = apply_seed_hints(topology.default_params(), seed_hints, topology)
+        mutated = mutate_params(
+            topology,
+            base,
+            seed=generation,
+            generation=generation,
+            total=total_n,
+            category=category,
+        )
         ev = evaluate_topology_params(category, mutated)
         netlist = topology.emit_netlist(mutated)
     except (ValueError, KeyError):
@@ -124,6 +134,9 @@ def _forge_worker(args: tuple[str, dict[str, float], str, int]) -> dict[str, Any
         "per_spec": ev.get("per_spec", {}),
         "won": ev["score"] == 1,
         "sim_ok": ev.get("sim_ok", False),
+        "compliance": {
+            k: v.get("pass") for k, v in ev.get("per_spec", {}).items() if v.get("pass") is not None
+        },
     }
 
 
@@ -148,6 +161,9 @@ def _process_result(
         generation=generation,
         topology_id=result["seed_id"],
         pass_margins=fit["margin_per_check"],
+        params=result.get("params"),
+        per_spec=result.get("per_spec"),
+        compliance=result.get("compliance"),
     )
 
     if won:
@@ -216,13 +232,13 @@ def run_forge(
         i = start
         while i < n:
             batch_end = min(i + workers, n)
-            batch_jobs: list[tuple[str, dict[str, float], str, int]] = []
+            batch_jobs: list[tuple[str, dict[str, float], str, int, int]] = []
             for j in range(i, batch_end):
                 category = categories[(i + j) % len(categories)]
                 hints_list = hint_groups.get(category, [])
                 hints = hints_list[(i + j) % len(hints_list)] if hints_list else {}
                 seed_id = f"topo_{category}_{(i + j) % max(1, len(hints_list) or 1)}"
-                batch_jobs.append((category, hints, seed_id, i + j))
+                batch_jobs.append((category, hints, seed_id, i + j, n))
 
             if dry_run:
                 for job in batch_jobs:

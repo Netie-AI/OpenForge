@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -77,12 +78,12 @@ def resolve_ngspice_cmd() -> list[str] | None:
     if sys == "windows":
         p = Path("C:/msys64/mingw64/bin/ngspice.exe")
         return [str(p)] if p.exists() else None
-    # linux / darwin
+    # linux / darwin — only return a path that actually exists
     for p in (Path("/usr/bin/ngspice"), Path("/bin/ngspice")):
         if p.exists():
             return [str(p)]
-    # fall back to PATH resolution
-    return ["ngspice"]
+    found = shutil.which("ngspice")
+    return [found] if found else None
 
 
 def ensure_dirs() -> None:

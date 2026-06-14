@@ -175,7 +175,9 @@ def _run_ngspice(netlist_text: str, timeout: int = NGSPICE_TIMEOUT) -> tuple[boo
     Write netlist to temp file, run ngspice -b, return (success, stdout+stderr).
     success=True only if ngspice exits 0 AND no fatal error keywords in output.
     """
-    cmd = resolve_ngspice_cmd() or ["ngspice"]
+    cmd = resolve_ngspice_cmd()
+    if not cmd:
+        return False, "ngspice not found"
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".sp", delete=False, prefix="openforge_"
     ) as tmp:

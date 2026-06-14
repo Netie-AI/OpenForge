@@ -7,14 +7,15 @@ import pytest
 from openanalog.config import resolve_ngspice_cmd
 from openanalog.presets import PRESETS
 
-NGSPICE = resolve_ngspice_cmd() is not None
+pytestmark = pytest.mark.skipif(
+    resolve_ngspice_cmd() is None,
+    reason="ngspice not available",
+)
 
 
 @pytest.mark.parametrize("preset", PRESETS, ids=[p.id for p in PRESETS])
 def test_preset_expectation(preset):
     """Each preset must match its documented expect_pass on ngspice."""
-    if not NGSPICE:
-        pytest.skip("ngspice not available")
     from openanalog.interface.designer import verify_preset
 
     out = verify_preset(preset.id)

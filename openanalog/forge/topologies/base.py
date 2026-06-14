@@ -35,7 +35,9 @@ class TopologyMetrics:
 
 
 def run_ngspice(deck: str, *, timeout: int | None = None) -> tuple[bool, str]:
-    cmd = resolve_ngspice_cmd() or ["ngspice"]
+    cmd = resolve_ngspice_cmd()
+    if not cmd:
+        return False, "ngspice not found"
     with tempfile.NamedTemporaryFile("w", suffix=".sp", delete=False, prefix="oftopo_") as tmp:
         tmp.write(deck)
         path = Path(tmp.name)

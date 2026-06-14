@@ -24,6 +24,9 @@ class DatasetWriter:
         topology_id: str,
         pass_margins: dict[str, float],
         instruction: str | None = None,
+        params: dict[str, Any] | None = None,
+        per_spec: dict[str, Any] | None = None,
+        compliance: dict[str, bool] | None = None,
     ) -> None:
         if fitness == 1:
             path = self.winners
@@ -36,6 +39,7 @@ class DatasetWriter:
                 "output": netlist,
                 "netlist": netlist,
                 "topology": topology,
+                "params": params or {},
                 "measured_specs": sim_result,
                 "sim_result": sim_result,
                 "fitness": 1,
@@ -46,12 +50,17 @@ class DatasetWriter:
         else:
             path = self.losers
             record = {
+                "topology": topology,
                 "netlist": netlist,
+                "params": params or {},
                 "sim_result": sim_result,
+                "measured_specs": sim_result,
                 "fitness": 0,
                 "topology_id": topology_id,
                 "generation": generation,
                 "failed": pass_margins,
+                "per_spec": per_spec or {},
+                "compliance": compliance or {},
             }
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
