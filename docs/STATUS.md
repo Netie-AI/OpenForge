@@ -44,17 +44,31 @@ Measured on WSL ngspice after Masala/AnalogGenie parenthesis → ngspice-flat co
 
 **Not parse-only.** `check_syntax()` → `run_op()` runs `ngspice -b` with `.op` appended.
 A seed is `sim_validated=True` only when ngspice exits 0 and the DC operating point
-converges (no “DC solution failed”, no fatal model/parse errors). Independent re-run
-on 2026-06-14: **765/1010** matched the same criterion (3 borderline timeouts).
+converges (no “DC solution failed”, no fatal model/parse errors).
 
-### Failure breakdown (242 seeds — not waste, diagnostic data)
+### Failure breakdown (242 seeds at first conversion — diagnostic)
 
-| Failure type | Count | Phase 3 / scope |
-|--------------|-------|-----------------|
-| DC op fail — analog topology (floating / ill-conditioned nodes) | 238 | Bias-stub limits on topology-only seeds; may improve with better deck prep |
-| DC op fail — BJT in original netlist | 2 | **Unblocks on SKY130** parasitic BJTs |
-| ngspice timeout (>5s deck) | 2 | Large hierarchical netlists; increase timeout or simplify |
-| PFD / XOR (digital) | 0 failed | Digital cells rarely appear in failed set; **out of scope** for analog forge |
+| Failure type | Count (initial) | Notes |
+|--------------|-----------------|-------|
+| DC op fail — analog topology (floating nodes) | 238 | Fixed by 1GΩ pulldowns + `.ic` in `prepare_seed_deck()` |
+| DC op fail — BJT in original netlist | 2 | Unblocks on SKY130 parasitic BJTs |
+| ngspice timeout (>5s) | 2 | Large hierarchical decks |
+| PFD / XOR (digital) | 0 in failed set | Out of scope for analog forge |
+
+**After deck-prep fix (2026-06-14):** 238/242 recovered → **~1,006/1,010** pass `.op`
+(4 remain: 2 BJT + 2 timeout). Re-run `scripts/renormalize_seeds.py` to refresh counts.
+
+### Forge fitness gate (real RS-series bar)
+
+| Metric | Value |
+|--------|-------|
+| Gate | `evaluate_forge_fitness()` → `score_design()` on `DEV_MODE_SPECS` |
+| `amplifier`/`unknown` | **No sim_ok shortcut** — must infer bench topology |
+| `forge --n 100 --reset` winners | **0 / 100** (2026-06-14) |
+| Contaminated corpus | `data/training/winners.jsonl.contaminated_phase2` (archived) |
+
+Topology inference: `openanalog/forge/topology_detector.py`. Measurement:
+`openanalog/forge/netlist_measure.py` + `forge_eval.py`.
 
 Converter path: `openanalog/ingestion/dialect.py` + `converter.py`. Regenerate with:
 

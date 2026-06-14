@@ -12,11 +12,11 @@ from openanalog import claude
 from openanalog.confidence import kg_tier
 from openanalog.config import FORGE_STATE, SEEDS_NORMALIZED, ensure_dirs
 from openanalog.forge.dataset_writer import DatasetWriter
-from openanalog.forge.fitness import score_fitness
+from openanalog.forge.forge_eval import evaluate_forge_fitness
 from openanalog.forge.generator import mutate_netlist, MutationMode
 from openanalog.forge.knowledge_graph import KnowledgeGraph
 from openanalog.forge.mutator import directed_mutate
-from openanalog.forge.simulator import is_simulatable, simulate
+from openanalog.forge.simulator import is_simulatable
 
 console = Console()
 
@@ -76,26 +76,27 @@ def _save_forge_state(state: dict[str, Any]) -> None:
 
 
 def _forge_worker(args: tuple[str, str, str, list[str]]) -> dict[str, Any] | None:
-    net, topo, seed_id, analyses = args
+    net, seed_topo, seed_id, analyses = args
     _ = analyses
     try:
         child = mutate_netlist(net, MutationMode.RANDOM)
     except ValueError:
         return None
-    sim = simulate(child, circuit_type=topo)
-    fit = score_fitness(topo, sim)
+    ev = evaluate_forge_fitness(child, seed_topo)
     return {
-        "topo": topo,
+        "topo": ev["inferred_topology"],
+        "seed_topo": seed_topo,
         "seed_id": seed_id,
         "child": child,
-        "sim": {
-            "bw_MHz": sim.bw_3db_MHz,
-            "gain_dB": sim.gain_dB,
-            "power_mW": sim.power_mW,
-            "PM_deg": sim.phase_margin,
+        "sim": ev.get("measured", {}),
+        "fit": {
+            "score": ev["score"],
+            "failed_checks": ev["failed_checks"],
+            "margin_per_check": ev["margin_per_check"],
         },
-        "fit": fit,
-        "won": fit["score"] == 1,
+        "per_spec": ev.get("per_spec", {}),
+        "won": ev["score"] == 1,
+        "sim_ok": ev.get("sim_ok", False),
     }
 
 
@@ -251,7 +252,10 @@ def run_forge(
             "stats": stats,
         }
     )
-    console.print(f"Done: {stats['sims']} sims, {stats['winners']} winners")
+    console.print(
+        f"Done: {stats['sims']} sims, {stats['winners']} winners "
+        f"(RS-series bar — not sim_ok)"
+    )
 
 
 def forge_status() -> dict:

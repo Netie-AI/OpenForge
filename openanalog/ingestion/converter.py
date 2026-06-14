@@ -270,8 +270,56 @@ def _collect_bias_nets(netlist: str) -> list[str]:
     return sorted(n for n in nets if n not in ("0", "vdd"))
 
 
+def _collect_circuit_nets(netlist: str) -> set[str]:
+    """Nets referenced on device lines (excluding models/directives)."""
+    nets: set[str] = set()
+    for raw in netlist.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("*", ".")):
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        head = parts[0][0].upper()
+        if head == "M" and len(parts) >= 6:
+            for tok in parts[1:5]:
+                nets.add(tok)
+        elif head in "RCL" and len(parts) >= 3:
+            nets.add(parts[1])
+            nets.add(parts[2])
+        elif head == "D" and len(parts) >= 3:
+            nets.add(parts[1])
+            nets.add(parts[2])
+        elif head == "X" and len(parts) >= 3:
+            for tok in parts[1:-1]:
+                nets.add(tok)
+    return nets
+
+
+def _driven_nets(deck: str) -> set[str]:
+    driven = {"0", "vdd", "gnd"}
+    for raw in deck.splitlines():
+        m = re.match(r"^\s*V(\w+)\s+(\S+)\s+(\S+)", raw, re.I)
+        if m:
+            driven.add(m.group(2).lower())
+            driven.add(m.group(3).lower())
+    return driven
+
+
+def _floating_pulldowns(netlist: str, driven: set[str]) -> list[str]:
+    """1GΩ bleed resistors on nets without explicit DC excitation."""
+    lines: list[str] = []
+    idx = 0
+    for net in sorted(_collect_circuit_nets(netlist), key=str.lower):
+        if net.lower() in driven or net.lower() in ("0", "vdd", "gnd"):
+            continue
+        idx += 1
+        lines.append(f"RFP{idx} {net} 0 1G")
+    return lines
+
+
 def prepare_seed_deck(netlist: str) -> str:
-    """Wrap flat netlist with models, supply rails, and bias stubs for DC .op."""
+    """Wrap flat netlist with models, supply rails, bias stubs, and DC helpers for .op."""
     text = netlist.strip()
     needs_vdd = re.search(r"\bvdd\b", text, re.I) is not None
 
@@ -288,6 +336,17 @@ def prepare_seed_deck(netlist: str) -> str:
         parts.append(".model DMOD D (IS=1e-14 N=1 RS=10)")
     parts.extend(stubs)
     parts.append(text)
+
+    partial = "\n".join(parts)
+    driven = _driven_nets(partial)
+    pulldowns = _floating_pulldowns(text, driven)
+    if pulldowns:
+        parts.extend(pulldowns)
+
+    if needs_vdd:
+        parts.append(".ic v(vdd)=1.8")
+    parts.append(".ic v(0)=0")
+
     if ".end" not in text.lower():
         parts.append(".end")
     return "\n".join(parts) + "\n"
