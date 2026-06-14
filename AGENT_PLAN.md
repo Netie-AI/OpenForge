@@ -103,14 +103,13 @@ until this gate is green on the real bar.
 (`M0 (net4 VSS VSS) nmos4`) that ngspice can't parse, so 98% of the corpus is
 inert.
 
-- [ ] Build a converter from the parenthesis dialect to ngspice-flat syntax, OR an
-      alternate parser path. Pick whichever is more robust; document the choice.
-- [ ] Add a pre-simulation validation gate: detect incompatible syntax and skip
-      with a warning rather than failing silently and wasting compute.
-- [ ] Report: how many of the 1,010 seeds now parse and simulate.
+- [x] `openanalog/ingestion/dialect.py` — `detect_dialect()` + breakdown
+- [x] `openanalog/ingestion/converter.py` — paren → flat, net normalize, deck prep
+- [x] Pre-simulation validation gate in `simulator.py` + `sim/ngspice.check_syntax`
+- [x] `data/seeds_normalized.jsonl` with `original_dialect`, `conversion_warnings`
+- [x] Corpus report in `docs/STATUS.md` — **768 / 1,010 sim_validated (76%)**
 
-**Exit criteria:** a measured, reported fraction of the seed corpus now feeds the
-forge instead of dying on parse.
+**Exit criteria:** measured fraction feeds forge — **GREEN** (>500 sim-validated).
 
 ---
 

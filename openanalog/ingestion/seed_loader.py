@@ -19,7 +19,9 @@ from openanalog.config import (
     ensure_dirs,
     resolve_ngspice_cmd,
 )
-from openanalog.sim.ngspice import run_op
+from openanalog.ingestion.converter import normalize_for_forge, prepare_seed_deck
+from openanalog.ingestion.dialect import detect_dialect, dialect_breakdown
+from openanalog.sim.ngspice import check_syntax, run_op
 
 console = Console()
 
@@ -74,19 +76,25 @@ def _emit(record: dict[str, Any], out: Path) -> None:
         f.write(json.dumps(record) + "\n")
 
 
-def _simulate_file(path: Path, *, dry_run: bool) -> bool:
+def _simulate_file(path: Path, *, dry_run: bool) -> tuple[bool, list[str], str]:
     if dry_run:
-        return True
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        flat, warnings, dialect = normalize_for_forge(text)
+        return True, warnings, flat if dialect == "masala-paren" else text
     text = path.read_text(encoding="utf-8", errors="ignore")
-    ok, _ = run_op(text, timeout=5)
-    return ok
+    return _simulate_text(text, dry_run=dry_run)
 
 
-def _simulate_text(text: str, *, dry_run: bool) -> bool:
+def _simulate_text(text: str, *, dry_run: bool) -> tuple[bool, list[str], str]:
+    """Return (sim_ok, conversion_warnings, flat_netlist)."""
+    flat, warnings, dialect = normalize_for_forge(text)
     if dry_run:
-        return True
-    ok, _ = run_op(text, timeout=5)
-    return ok
+        if dialect == "masala-paren":
+            return True, warnings, flat
+        return True, warnings, text
+    deck = prepare_seed_deck(flat)
+    ok, _ = check_syntax(deck, timeout=5)
+    return ok, warnings, flat if dialect == "masala-paren" else text
 
 
 def _iter_netlists(root: Path) -> Iterator[tuple[Path, str]]:
@@ -146,19 +154,22 @@ def spice_datasets_loader(
                 text = ltspice_asc_to_spice(text)
             topo = _classify_circuit(text, path)
             stats[topo]["total"] += 1
-            ok = _simulate_text(text, dry_run=dry_run)
+            ok, conv_warnings, flat_nl = _simulate_text(text, dry_run=dry_run)
             if not ok:
                 continue
             if count >= limit:
                 break
             stats[topo]["validated"] += 1
+            dialect = detect_dialect(text)
             rec = {
                 "id": f"spice_{count:05d}",
                 "source": "spice_datasets",
                 "source_subdir": sub.name,
                 "circuit_type": topo,
-                "netlist": text,
-                "param_hints": _count_components(text),
+                "netlist": flat_nl,
+                "original_dialect": dialect,
+                "conversion_warnings": conv_warnings,
+                "param_hints": _count_components(flat_nl),
                 "spec_hints": {},
                 "sim_validated": True,
                 "source_confidence": 0.65,
@@ -194,13 +205,16 @@ def analoggenie_loader(
         if topo == "unknown" and ("pmos4" in text or "nmos4" in text):
             topo = "amplifier"
         stats[topo]["total"] += 1
-        ok = _simulate_text(text, dry_run=dry_run)
+        ok, conv_warnings, flat_nl = _simulate_text(text, dry_run=dry_run)
         stats[topo]["validated"] += int(ok)
+        dialect = detect_dialect(text)
         rec = {
             "id": f"analoggenie_{cir.parent.name}",
             "source": "analoggenie",
             "circuit_type": topo,
-            "netlist": text,
+            "netlist": flat_nl,
+            "original_dialect": dialect,
+            "conversion_warnings": conv_warnings,
             "param_hints": {"device_lines": len(text.splitlines())},
             "spec_hints": {},
             "sim_validated": ok,
@@ -282,15 +296,18 @@ def masala_chai_loader(
             if topo == "unknown":
                 topo = _classify_circuit(netlist, pseudo_path)
             stats[topo]["total"] += 1
-            ok = _simulate_text(netlist, dry_run=dry_run)
+            ok, conv_warnings, flat_nl = _simulate_text(netlist, dry_run=dry_run)
             if ok:
                 stats[topo]["validated"] += 1
+            dialect = detect_dialect(netlist)
             rec = {
                 "id": f"masala_{count:05d}",
                 "source": "masala_chai",
                 "circuit_type": topo,
-                "netlist": netlist,
-                "param_hints": _count_components(netlist),
+                "netlist": flat_nl,
+                "original_dialect": dialect,
+                "conversion_warnings": conv_warnings,
+                "param_hints": _count_components(flat_nl),
                 "spec_hints": {"description": description[:800]},
                 "sim_validated": ok,
                 "source_confidence": 0.75 if ok else 0.55,
@@ -383,7 +400,36 @@ def load_all_seeds(
     }
     console.print(f"Loaded: {totals}")
     print_seed_stats(stats)
+    _print_dialect_report(out)
     return out
+
+
+def _print_dialect_report(path: Path) -> None:
+    """Print dialect + sim-valid breakdown for all seeds in the output file."""
+    if not path.exists():
+        return
+    netlists: list[str] = []
+    sim_ok = 0
+    total = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        total += 1
+        netlists.append(rec.get("netlist", ""))
+        if rec.get("sim_validated"):
+            sim_ok += 1
+    breakdown = dialect_breakdown(netlists)
+    table = Table(title="Seed corpus dialect report (Phase 2)")
+    table.add_column("dialect")
+    table.add_column("count")
+    for d, n in sorted(breakdown.items()):
+        table.add_row(d, str(n))
+    table.add_row("TOTAL", str(total))
+    table.add_row("sim_validated", str(sim_ok))
+    pct = f"{100 * sim_ok / total:.1f}%" if total else "—"
+    table.add_row("sim_valid_pct", pct)
+    console.print(table)
 
 
 def print_seed_stats(stats: dict[str, dict[str, int]]) -> None:

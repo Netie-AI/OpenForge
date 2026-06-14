@@ -17,10 +17,10 @@ def test_parse_ac_results():
 def test_analoggenie_syntax_detected():
     netlist = "M0 (IOUT1 net4 VSS VSS) nmos4\nR0 (VDD net4) resistor"
     assert is_analoggenie_syntax(netlist)
-    assert not is_simulatable(netlist)
+    assert is_simulatable(netlist)
     r = simulate_netlist(netlist)
-    assert not r.sim_ok
-    assert r.failed.get("syntax") == "analoggenie_custom_format"
+    # Without ngspice, op may fail; should not be rejected at syntax gate.
+    assert r.failed.get("syntax") != "analoggenie_custom_format"
 
 
 def test_standard_spice_not_analoggenie():

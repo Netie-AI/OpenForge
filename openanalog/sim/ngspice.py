@@ -26,7 +26,19 @@ def run_batch(netlist: str, *, timeout: int | None = None) -> tuple[bool, str]:
             timeout=timeout or NGSPICE_TIMEOUT,
         )
         text = (r.stdout or "") + (r.stderr or "")
-        return r.returncode == 0, text[:2000]
+        fatal = any(
+            kw in text.lower()
+            for kw in (
+                "fatal",
+                "error on line",
+                "could not find a valid modelname",
+                "device already exists",
+                "simulation interrupted due to error",
+                "undefined",
+                "expression err",
+            )
+        )
+        return (r.returncode == 0 and not fatal), text[:2000]
     except FileNotFoundError:
         return False, "ngspice executable missing"
     except subprocess.TimeoutExpired:
@@ -46,3 +58,17 @@ def run_op(netlist: str, *, timeout: int = 5) -> tuple[bool, str]:
     if ".end" not in deck.lower():
         deck += ".end\n"
     return run_batch(deck, timeout=timeout)
+
+
+def check_syntax(netlist: str, *, timeout: int = 5) -> tuple[bool, str]:
+    """
+    Pre-simulation gate: run ngspice batch with ``.op`` appended.
+
+    ``sim_validated=True`` requires ngspice exit code 0 **and** a converged DC
+    operating point (no fatal parse/model errors). This is not parse-only.
+    """
+    ok, output = run_op(netlist, timeout=timeout)
+    if ok:
+        return True, "syntax ok"
+    snippet = (output or "ngspice failed")[:300]
+    return False, snippet

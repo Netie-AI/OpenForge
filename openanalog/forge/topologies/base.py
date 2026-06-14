@@ -16,15 +16,7 @@ from typing import Any
 
 from openanalog.config import NGSPICE_TIMEOUT, resolve_ngspice_cmd
 
-BUNDLED_MODELS = """
-.model nmos_ana nmos (level=1 vto=0.7 kp=120u gamma=0.45 phi=0.8 lambda=0.02
-+ tox=1e-8 cgso=2e-10 cgdo=2e-10 cj=1e-4 cjsw=5e-10)
-.model pmos_ana pmos (level=1 vto=-0.7 kp=40u gamma=0.45 phi=0.8 lambda=0.03
-+ tox=1e-8 cgso=2e-10 cgdo=2e-10 cj=1e-4 cjsw=5e-10)
-"""
-
-NMOS = "nmos_ana"
-PMOS = "pmos_ana"
+from openanalog.sim.models import BUNDLED_MODELS, NMOS, PMOS
 
 
 @dataclass

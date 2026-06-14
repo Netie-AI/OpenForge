@@ -11,8 +11,9 @@ Strategy:
        - netlist has a standard SPICE source (Vxxx or Ixxx lines)
   3. .measure syntax uses correct ngspice form:
        .meas ac bw_3db trig ... (NOT vdb(out)-3 expression syntax)
-  4. AnalogGenie / Masala-CHAI custom syntax (M0 (...) nmos4) is detected
-     and skipped immediately — never sent to ngspice.
+  4. Masala/AnalogGenie parenthesis syntax is converted to ngspice-flat
+     (see openanalog/ingestion/converter.py) before simulation; incompatible
+     netlists are skipped with warnings.
   5. Returns FitnessResult with all fields; sim_ok=False on any failure.
 """
 
@@ -25,6 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from openanalog.config import NGSPICE_TIMEOUT, resolve_ngspice_cmd
+from openanalog.ingestion.converter import normalize_for_forge, prepare_seed_deck
+from openanalog.sim.ngspice import check_syntax
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -75,10 +78,33 @@ _SOURCE_LINE_RE = re.compile(r"^\s*[VvIi]\w+\s+", re.MULTILINE)
 
 
 def is_analoggenie_syntax(netlist: str) -> bool:
-    """Return True if netlist uses AnalogGenie/Masala parenthesis syntax."""
-    has_paren_style = bool(_ANALOGGENIE_RE.search(netlist))
-    has_standard = bool(_STANDARD_MOSFET_RE.search(netlist))
-    return has_paren_style and not has_standard
+    """Return True if netlist uses AnalogGenie/Masala parenthesis syntax (unconverted)."""
+    from openanalog.ingestion.dialect import detect_dialect
+
+    return detect_dialect(netlist) == "masala-paren"
+
+
+def prepare_netlist_for_sim(netlist: str) -> tuple[str, list[str]]:
+    """Convert dialect if needed and wrap with models/supplies for simulation."""
+    flat, warnings, _ = normalize_for_forge(netlist)
+    return prepare_seed_deck(flat), warnings
+
+
+def validate_syntax(netlist: str, *, timeout: int = 5) -> tuple[bool, list[str]]:
+    """
+    Pre-simulation validation gate.
+
+    Incompatible / unconvertible netlists return (False, warnings) without
+    calling ngspice on the raw parenthesis form.
+    """
+    flat, warnings, dialect = normalize_for_forge(netlist)
+    if dialect == "unknown" and not flat.strip():
+        return False, ["empty netlist"]
+    deck = prepare_seed_deck(flat)
+    ok, msg = check_syntax(deck, timeout=timeout)
+    if not ok:
+        warnings.append(f"syntax check failed: {msg}")
+    return ok, warnings
 
 
 def has_output_node(netlist: str) -> bool:
@@ -90,7 +116,11 @@ def has_spice_source(netlist: str) -> bool:
 
 
 def is_simulatable(netlist: str) -> bool:
-    return not is_analoggenie_syntax(netlist) and has_spice_source(netlist)
+    flat, _, dialect = normalize_for_forge(netlist)
+    if dialect == "unknown" and not flat.strip():
+        return False
+    deck = prepare_seed_deck(flat)
+    return has_spice_source(deck) or has_spice_source(flat) or "VDD_SUPPLY" in deck
 
 
 # ---------------------------------------------------------------------------
@@ -267,14 +297,15 @@ def simulate_netlist(netlist: str, circuit_type: str = "unknown") -> FitnessResu
     result = FitnessResult()
 
     if is_analoggenie_syntax(netlist):
-        result.failed["syntax"] = "analoggenie_custom_format"
-        result.warnings.append(
-            "AnalogGenie/Masala syntax detected (parenthesis style) — "
-            "skipped. Convert to standard SPICE before simulating."
-        )
-        return result
+        deck, conv_warnings = prepare_netlist_for_sim(netlist)
+        result.warnings.extend(conv_warnings)
+        netlist = deck
+    elif not has_spice_source(netlist):
+        deck, conv_warnings = prepare_netlist_for_sim(netlist)
+        result.warnings.extend(conv_warnings)
+        netlist = deck
 
-    if not has_spice_source(netlist):
+    if not has_spice_source(netlist) and "VDD_SUPPLY" not in netlist:
         result.failed["syntax"] = "no_voltage_or_current_source"
         result.warnings.append("No V/I source found — cannot simulate.")
         return result
