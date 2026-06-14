@@ -75,11 +75,11 @@ PRESETS: list[DesignPreset] = [
         name="RS2105 Analog Switch",
         category="switch",
         spec=DEV_MODE_SPECS["switch"],
-        expect_pass=False,
+        expect_pass=True,
         budget=200,
         seed=1,
         part="RS2105",
-        notes="blocked-phase3 on level-1; expect fail until SKY130",
+        notes="PMOS S/D fix restores Ron <50Ω on bundled level-1",
     ),
     DesignPreset(
         id="rs2660_charge_pump",

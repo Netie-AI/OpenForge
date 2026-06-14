@@ -49,8 +49,8 @@ def _core(ms: ResolvedModels) -> str:
     wd, ld = "{{WDRV}}", "{{LENDRV}}"
     lines = [
         "VSUP vdd 0 {VDD}",
-        mos_line("n", "out", "sig", "ctrl", n_bulk, "n", w=wn, l=ln, ms=ms),
-        mos_line("p", "sig", "out", "ctrl_n", p_bulk, "p", w=wp, l=lp, ms=ms),
+        mos_line("n", "sig", "out", "ctrl", n_bulk, "n", w=wn, l=ln, ms=ms),
+        mos_line("p", "out", "ctrl_n", "sig", p_bulk, "p", w=wp, l=lp, ms=ms),
         mos_line("nd", "ctrl_n", "ctrl", "0", "0", "n", w=wd, l=ld, ms=ms),
         mos_line("pd", "ctrl_n", "ctrl", "vdd", "vdd", "p", w=wd, l=ld, ms=ms),
         "Rload out 0 1k",
