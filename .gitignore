@@ -1,0 +1,14 @@
+.venv/
+.venv_wsl/
+__pycache__/
+*.py[cod]
+.env
+.env.local
+env.local
+*.gpickle
+papers/processed/
+data/training/
+data/kg_seeds.jsonl
+data/seeds_normalized.jsonl
+.pytest_cache/
+checkpoint.json

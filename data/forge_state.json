@@ -1,0 +1,16 @@
+{
+  "completed": 200,
+  "target": 200,
+  "topology": null,
+  "all_topologies": false,
+  "stats": {
+    "sims": 200,
+    "winners": 200,
+    "by_topology": {
+      "unknown": {
+        "sims": 200,
+        "winners": 200
+      }
+    }
+  }
+}

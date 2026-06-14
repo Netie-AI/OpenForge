@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openanalog"
+version = "0.1.0"
+description = "PDF → schematic → SPICE → simulation forge for analog IC design"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40.0",
+    "networkx>=3.2",
+    "numpy>=1.26",
+    "pydantic>=2.5",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+    "scipy>=1.11",
+    "typer>=0.12",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+ingest = ["marker-pdf>=0.2"]
+forge = ["pyspice>=1.5"]
+train = ["peft>=0.10", "transformers>=4.40", "torch>=2.1", "datasets>=2.18"]
+web = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.5"]
+all = ["openanalog[ingest,forge,train,web]"]
+
+[project.scripts]
+openanalog = "openanalog.__main__:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["openanalog*"]

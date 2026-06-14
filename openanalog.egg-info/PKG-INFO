@@ -1,0 +1,82 @@
+Metadata-Version: 2.4
+Name: openanalog
+Version: 0.1.0
+Summary: PDF → schematic → SPICE → simulation forge for analog IC design
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: anthropic>=0.40.0
+Requires-Dist: networkx>=3.2
+Requires-Dist: numpy>=1.26
+Requires-Dist: pydantic>=2.5
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: rich>=13.7
+Requires-Dist: scipy>=1.11
+Requires-Dist: typer>=0.12
+Requires-Dist: tqdm>=4.66
+Provides-Extra: ingest
+Requires-Dist: marker-pdf>=0.2; extra == "ingest"
+Provides-Extra: forge
+Requires-Dist: pyspice>=1.5; extra == "forge"
+Provides-Extra: train
+Requires-Dist: peft>=0.10; extra == "train"
+Requires-Dist: transformers>=4.40; extra == "train"
+Requires-Dist: torch>=2.1; extra == "train"
+Requires-Dist: datasets>=2.18; extra == "train"
+Provides-Extra: web
+Requires-Dist: fastapi>=0.110; extra == "web"
+Requires-Dist: uvicorn>=0.29; extra == "web"
+Requires-Dist: pydantic>=2.5; extra == "web"
+Provides-Extra: all
+Requires-Dist: openanalog[forge,ingest,train,web]; extra == "all"
+
+# OpenAnalog
+
+PDF → schematic → SPICE → ngspice forge → training data for analog IC design.
+
+## Quick start (Windows + WSL recommended for ngspice)
+
+```powershell
+cd C:\Users\oojia\OpenForge
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -e .
+```
+
+WSL (full stack including ngspice + marker):
+
+```bash
+bash setup.sh
+source .venv/bin/activate
+```
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `python -m openanalog ingest --folder ./papers/inbox/` | TASK-001 PDF pipeline |
+| `python -m openanalog ingest --status` | Ingest progress |
+| `python -m openanalog load-seeds` | TASK-002 normalize free datasets |
+| `python -m openanalog forge --topology tia --n 1000` | TASK-003 evolutionary forge |
+| `python -m openanalog status` | Live dashboard |
+| `python -m openanalog train --dataset data/training/winners.jsonl` | TASK-005 LoRA finetune |
+
+## Claude feedback (constrained)
+
+Confidence zones from `OPENANALOG_CURSOR_PROMPTS.md`:
+
+- **≥ 0.9** — auto-accept to KG seeds
+- **0.7–0.9** — accept with `needs_review`
+- **0.5–0.7** — Claude chain-of-thought re-examination (`openanalog/claude.py`)
+- **< 0.5** — reject
+
+Top forge performers optionally get Level-5 Claude netlist review.
+
+## API keys
+
+Copy `ANTHROPIC_API_KEY` into `.env` (or use existing `env.local` — loaded automatically).
+
+## Data
+
+- Drop PDFs in `papers/inbox/`
+- `spice-datasets` at repo root is used automatically if `data/seeds/spice-datasets` is missing
+- Masala-CHAI: `git clone --depth=1 https://github.com/jitendra-bhandari/Masala-CHAI data/seeds/Masala-CHAI`
