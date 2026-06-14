@@ -20,19 +20,20 @@ from openanalog.forge.topologies.base import (
 
 @dataclass
 class ComparatorParams:
-    W1: float = 10.0
+    W1: float = 4.0
     L1: float = 0.8
-    W3: float = 12.0
+    W3: float = 6.0
     L3: float = 0.8
-    W5: float = 20.0
+    W5: float = 4.0
     L5: float = 0.8
-    W6: float = 30.0
+    W6: float = 12.0
     L6: float = 0.8
-    W7: float = 20.0
+    W7: float = 8.0
     L7: float = 0.8
-    Wb: float = 10.0
+    Wb: float = 4.0
     Lb: float = 0.8
-    Iref: float = 30e-6
+    Iref: float = 500e-9
+    Rload: float = 50e3
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
@@ -46,6 +47,7 @@ def _params_block(p: ComparatorParams, supply_V: float) -> str:
 .param W5={p.W5}u L5={p.L5}u W6={p.W6}u L6={p.L6}u
 .param W7={p.W7}u L7={p.L7}u Wb={p.Wb}u Lb={p.Lb}u
 .param IREF={p.Iref}
+.param RLOAD={p.Rload}
 """
 
 _CORE = f"""
@@ -59,7 +61,7 @@ M2 nout1 vinn tail 0 {NMOS} W={{W1}} L={{L1}}
 M3 n1    n1 vdd vdd {PMOS} W={{W3}} L={{L3}}
 M4 nout1 n1 vdd vdd {PMOS} W={{W3}} L={{L3}}
 M6 vout nout1 vdd vdd {PMOS} W={{W6}} L={{L6}}
-Rload vout 0 10k
+Rload vout 0 {{RLOAD}}
 """
 
 
@@ -98,19 +100,19 @@ meas dc vos find v(vinp) when v(vout)={mid} cross=1
 
 def _build_tran_deck(p: ComparatorParams, supply_V: float) -> str:
     vcm = supply_V / 2.0
-    lo, hi = vcm - 0.2, vcm + 0.2
-    thresh = vcm + 0.05
-    mid = supply_V * 0.5
+    vin_lo = vcm - 0.15
+    vin_hi = vcm + 0.15
+    thresh = vcm + 0.02
+    vout_trip = supply_V * 0.5
     harness = f"""
-Vinp vinp 0 pulse({lo} {hi} 1u 1n 1n 8u 16u)
 Vinn vinn 0 {vcm}
+Vinp vinp 0 pulse({vin_lo} {vin_hi} 200n 50p 50p 4u 20u)
 .control
 set filetype=ascii
-tran 10n 10u
-meas tran t_plh trig v(vinp) val={thresh} rise=1 targ v(vout) val={mid} rise=1
-meas tran t_phl trig v(vinp) val={thresh} fall=1 targ v(vout) val={mid} fall=1
-meas tran trise trig v(vout) val={supply_V*0.1} rise=1 targ v(vout) val={supply_V*0.9} rise=1
-meas tran tfall trig v(vout) val={supply_V*0.9} fall=1 targ v(vout) val={supply_V*0.1} fall=1
+tran 5n 3u
+meas tran t_plh trig v(vinp) val={thresh} rise=1 targ v(vout) val={vout_trip} fall=1
+meas tran trise trig v(vout) val={supply_V * 0.8} fall=1 targ v(vout) val={supply_V * 0.2} fall=1
+meas tran tfall trig v(vout) val={supply_V * 0.2} rise=1 targ v(vout) val={supply_V * 0.8} rise=1
 .endc
 .end
 """
@@ -127,9 +129,10 @@ class ComparatorTopology(Topology):
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
         return {
-            "W1": (2.0, 80.0, True), "W3": (2.0, 80.0, True), "W5": (4.0, 120.0, True),
-            "W6": (4.0, 150.0, True), "W7": (4.0, 120.0, True), "Wb": (2.0, 40.0, True),
-            "Iref": (5e-6, 200e-6, True),
+            "W1": (2.0, 60.0, True), "W3": (2.0, 60.0, True), "W5": (2.0, 80.0, True),
+            "W6": (4.0, 120.0, True), "W7": (2.0, 80.0, True), "Wb": (2.0, 30.0, True),
+            "Iref": (50e-9, 20e-6, True),
+            "Rload": (5e3, 100e3, True),
         }
 
     def measurable_specs(self) -> set[str]:
@@ -154,13 +157,8 @@ class ComparatorTopology(Topology):
             m.raw = tout[-3000:]
             if tok:
                 t_plh = grab_meas("t_plh", tout)
-                t_phl = grab_meas("t_phl", tout)
-                if t_plh and t_phl:
-                    m.values["tp_us"] = max(t_plh, t_phl) * 1e6
-                elif t_plh:
+                if t_plh and t_plh > 0:
                     m.values["tp_us"] = t_plh * 1e6
-                elif t_phl:
-                    m.values["tp_us"] = t_phl * 1e6
                 tr = grab_meas("trise", tout)
                 tf = grab_meas("tfall", tout)
                 m.values["trise_ns"] = tr * 1e9 if tr else None

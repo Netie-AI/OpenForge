@@ -33,7 +33,8 @@ def _satisfaction(metric: float | None, value: float, mode: str) -> float:
     return max(0.0, 1.0 - rel)
 
 
-def _passes(metric: float | None, value: float, mode: str, tol: float = 0.3) -> bool:
+def _passes(metric: float | None, value: float, mode: str, tol: float = 0.05) -> bool:
+    """Hard pass gate for meets_all / fitness=1. Target mode uses tight tol (5%)."""
     if metric is None:
         return False
     if mode == "min":
@@ -135,6 +136,10 @@ def _sample(
                 val = rng.uniform(lo, hi)
         if key == "stages":
             val = int(round(val))
+        if key == "cap_F":
+            val = max(val, 10e-9)
+        if key == "Iref":
+            val = max(val, 50e-9)
         setattr(p, key, val)
     return p
 
@@ -163,7 +168,9 @@ def size(
     pool: list[Candidate] = []
     best: Candidate | None = None
     explore = max(1, int(budget * 0.6))
-    topk_n = 5 if topology.circuit_type == "opamp" else 3
+    topk_n = {"opamp": 5, "comparator": 6, "switch": 5, "charge_pump": 4}.get(
+        topology.circuit_type, 3
+    )
 
     for i in range(budget):
         if best is not None and i >= explore:
