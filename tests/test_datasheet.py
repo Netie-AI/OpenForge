@@ -1,3 +1,4 @@
+from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
 from openanalog.interface.datasheet import (
     detect_category,
     extract_comparator_specs_regex,
@@ -60,3 +61,10 @@ def test_extract_comparator():
     spec = extract_comparator_specs_regex(COMPARATOR)
     assert spec["circuit_type"] == "comparator"
     assert "tp_us" in spec["targets"]
+
+
+def test_dev_mode_specs_parse():
+    for cat, inline in DEV_MODE_SPECS.items():
+        spec = parse_inline_spec(inline, category=cat)
+        assert spec["circuit_type"] == cat
+        assert spec["targets"]

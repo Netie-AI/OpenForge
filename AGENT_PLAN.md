@@ -30,6 +30,12 @@ while the actual circuits fail in ngspice.* Do not reproduce it.
 6. **Report honestly.** If a category is broken, say it is broken. Do not write
    a celebratory summary that contradicts the actual run output.
 7. **Small commits, one task per commit**, message format: `phaseN: <task>`.
+8. **The fitness bar is the datasheet bar.** `make smoke`, `docs/STATUS.md`, and
+   the training gate all use the RS-series envelopes in
+   `openanalog/forge/spec_envelopes.py`. Never add a second, looser dev profile
+   that lets `meets_all=True` mask weak silicon. Target-mode specs use 5% pass
+   tolerance in `score_design` (not 30% dev slack). A red STATUS that is true
+   beats a green one that lies.
 
 ---
 
@@ -47,59 +53,51 @@ while the actual circuits fail in ngspice.* Do not reproduce it.
       real state: `working / partial / broken / not-started`, updated each phase.
 
 **Exit criteria:** repo pushes clean to GitHub, CI runs tests on push,
-`docs/STATUS.md` reflects reality (op-amp = working; the other four = broken).
+`docs/STATUS.md` reflects reality.
 
 ---
 
 ## Phase 1 — Make all categories actually converge (THE GATE)
 
-Nothing downstream matters until this is done. Today only the op-amp produces
-real fitness=1. The other four report `n/a` or garbage. Fix them one at a time;
-**do not move to the next until the current one produces a real ngspice-validated
-fitness=1 design and has a behavioral test.**
+Nothing downstream matters until this is done. Benches now produce real ngspice
+measurements for four dev-mode categories, but **most do not pass the RS-series
+datasheet bar** in `spec_envelopes.py`. Fix them one at a time; **do not move to
+the next until the current one produces a real ngspice-validated fitness=1 design
+on the datasheet bar and has a behavioral test.**
 
-### 1a. vref (start here — cleanest failure)
-- Symptom: outputs **0.701 V** (≈ one Vto) instead of 1.2 V; line_reg 2031 mV.
-- Diagnosis: the beta-multiplier reference never starts up; the node sits at one
-  threshold. This is a startup/operating-point problem.
-- [ ] Dump the DC operating point (`.op`) and inspect every node voltage.
-- [ ] Identify why the reference branch is degenerate (likely no startup path, or
-      the mirror/PTAT branch isn't biased).
-- [ ] Fix the topology/bench so a real 1.2 V appears in ngspice.
-- [ ] Behavioral test asserts measured vref ∈ [1.15, 1.25] V from a real run.
+**vref is not Phase 1 work.** Real ~1.2 V bandgap needs SKY130 parasitic BJTs
+(Phase 3). `make smoke` skips vref; do not fake a divider reference.
 
-### 1b. comparator
-- Symptom: Vos measured **2498 mV** vs 3 mV target — the bench is measuring a
-  degenerate point; the comparator isn't switching.
-- [ ] Verify the diff pair actually trips: sweep vinp around vinn, confirm output
-      swings rail-to-rail.
-- [ ] Fix the offset measurement so it measures real input-referred offset, not a
-      stuck node.
-- [ ] Behavioral test asserts the output switches and Vos is in the mV range.
+### 1a. comparator (start here — bench works, specs don't)
+- Symptom: tp ~8 µs vs RS8901 tp<1 µs; iq ~113 µA vs iq<1 µA.
+- [ ] Verify the diff pair trips and transient delay reflects real switching.
+- [ ] Let the sizer push bias/sizing against the RS8901 envelope.
+- [ ] Behavioral test asserts `meets_all` on the datasheet bar from a real run.
+
+### 1b. analog_switch
+- Symptom: ron ~1208 Ω vs RS2105 ron<50 Ω; ton/toff still unmeasured.
+- [ ] Widen transmission-gate devices / overdrive so RON drops toward 50 Ω.
+- [ ] Implement ton/toff transient measurements.
+- [ ] Behavioral test asserts RON and BW on the datasheet bar.
 
 ### 1c. charge_pump
-- Symptom: returns `n/a` for vout/ripple. **Known concrete bug:** the generated
-  netlist defines `C0` twice —
-  `C0 n0 n1 ...` and `C0 n0 vdd ...`. Duplicate instance name. ngspice will error
-  or silently clobber one. The second pumping cap must have a unique name.
-- [ ] Fix duplicate device names in the Dickson netlist generator.
-- [ ] Verify the clock-coupled pumping actually charges the output node.
-- [ ] Behavioral test asserts vout ≈ target and ripple is measured (not n/a).
+- Symptom: vout ~4.1 V vs RS2660 vout=5 V (diode drops are real).
+- [ ] Fix topology or target interpretation so pumped output meets 5 V bar.
+- [ ] Behavioral test asserts vout, ripple, settle on the datasheet bar.
 
-### 1d. analog_switch
-- Symptom: ron/bw return `n/a` — the bench isn't producing measurements.
-- [ ] Implement the RON measurement (DC: drive sig, measure V/I across the gate).
-- [ ] Implement the −3dB bandwidth measurement (AC sweep through the on-gate).
-- [ ] Behavioral test asserts RON and BW are real numbers in range.
+### 1d. opamp (closest — verify on hard bar)
+- Bench produces real AOL/GBP/PM/Iq; confirm sizer hits RS321 envelope
+  (gbp=1.1MHz pm>60 aol>95dB iq<80uA) not a softened smoke profile.
+- [ ] Behavioral test asserts `meets_all` on RS321 targets.
 
-**Phase 1 exit criteria:** `make smoke` produces a real fitness=1 design for ALL
-five categories, each backed by a behavioral test. `docs/STATUS.md` shows five
-`working`. This is the milestone that's been blocked for weeks — clear it before
-touching anything below.
+**Phase 1 exit criteria:** `make smoke` produces fitness=1 for all four
+dev-mode categories **against `spec_envelopes.py`**, each backed by a behavioral
+test. `docs/STATUS.md` shows four `working`. Do **not** start Phase 2 or Phase 3
+until this gate is green on the real bar.
 
 ---
 
-## Phase 2 — Seed parser (unlock the dead data)
+## Phase 2 — Seed parser (unlock the dead data) [gated on Phase 1]
 
 ~990 of 1,010 seeds use AnalogGenie/Masala parenthesis syntax
 (`M0 (net4 VSS VSS) nmos4`) that ngspice can't parse, so 98% of the corpus is
@@ -119,15 +117,17 @@ forge instead of dying on parse.
 ## Phase 3 — Real PDK (silicon-plausible numbers) [gated on Phase 1]
 
 The bundled level-1 models are toys. No one trusts a number that didn't come from
-a real process.
+a real process. **Enter Phase 3 when level-1 cannot close the datasheet gap**
+(e.g. switch RON still >>50 Ω after sizing) — not on schedule alone.
 
 - [ ] Integrate SKY130 via volare with a **pinned** version (document the pin).
 - [ ] Add a config switch: bundled-models (fast/dev) vs SKY130 (silicon-plausible).
+- [ ] **vref:** real bandgap on SKY130 parasitic BJTs; no fake 1.2 V divider in dev.
 - [ ] Re-validate every category on SKY130. Expect breakage — that's the point;
       log what was an artifact of fake models.
 
-**Exit criteria:** every category produces silicon-plausible results on SKY130,
-re-validated and logged.
+**Exit criteria:** every category (including vref) produces silicon-plausible
+results on SKY130, re-validated and logged.
 
 ---
 
@@ -149,7 +149,7 @@ invented. The "it's alive" milestone.
 ## Phase 5 — Multitask training prep & finetune [gated on Phase 4 + sufficient fitness=1 data]
 
 This is where the 96GB rig earns its place. Do not start until the forge is
-reliably minting fitness=1 designs across categories.
+reliably minting fitness=1 designs across categories **on the datasheet bar**.
 
 - [ ] Define a single multitask data schema across ALL categories (prompt/spec →
       validated netlist + measured specs). One model, all categories — not one
@@ -170,7 +170,8 @@ netlist, verifier-gated. This is the demo to show the world.
 
 For each task the agent completes:
 1. **Run it for real** — `make smoke` or the specific ngspice bench, not just pytest.
-2. **Check against acceptance criteria** — measured value in range from a real run.
+2. **Check against acceptance criteria** — measured value in range from a real run
+   **on the RS-series envelope in `spec_envelopes.py`**.
 3. **Update `docs/STATUS.md`** honestly.
 4. **Commit** with `phaseN: <task>`.
 5. If it fails, **say so in the commit/PR notes** and leave the status `broken` —

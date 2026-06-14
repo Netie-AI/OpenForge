@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
+from openanalog.forge.spec_envelopes import DEV_MODE_SPECS, VREF_PHASE3_SPEC
 from openanalog.forge.topologies import REGISTRY
 from openanalog.interface.designer import design
 
@@ -59,13 +60,7 @@ Quiescent Current: 60 uA
 """,
 }
 
-INLINE_SAMPLES: dict[str, str] = {
-    "opamp": "gbp=1.1MHz pm>60 aol>95dB iq<80uA slew>0.5",
-    "comparator": "type=comparator tp<1us vos<3mV iq<1uA",
-    "switch": "type=switch ron<50ohm bw>10MHz ton<20ns toff<20ns",
-    "charge_pump": "type=charge_pump vout=5V settle<5ms ripple<50mV",
-    "vref": "type=vref vref=1.2V line_reg<5mV iq<100uA",
-}
+INLINE_SAMPLES: dict[str, str] = {**DEV_MODE_SPECS, "vref": VREF_PHASE3_SPEC}
 
 METRIC_LABELS: dict[str, tuple[str, str, int]] = {
     "aol_dB": ("AOL", "dB", 1),

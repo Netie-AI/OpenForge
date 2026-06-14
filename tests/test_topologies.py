@@ -42,6 +42,19 @@ def test_charge_pump_score():
     assert c.meets_all is True
 
 
+def test_charge_pump_vout_below_datasheet_bar_fails():
+    topo = ChargePumpTopology()
+    m = TopologyMetrics(ok=True, values={"vout_V": 4.27, "ripple_mV": 30.0, "settle_ms": 3.0})
+    targets = {
+        "vout_V": {"value": 5.0, "mode": "target"},
+        "ripple_mV": {"value": 50.0, "mode": "max"},
+        "settle_ms": {"value": 5.0, "mode": "max"},
+    }
+    c = score_design(m, targets, measurable=topo.measurable_specs(), weights=topo.spec_weights)
+    assert c.per_spec["vout_V"]["pass"] is False
+    assert c.meets_all is False
+
+
 def test_vref_score():
     topo = VRefTopology()
     m = TopologyMetrics(ok=True, values={"vref_V": 1.22, "line_reg_mV": 2.0, "iq_uA": 50.0})

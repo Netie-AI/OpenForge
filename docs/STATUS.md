@@ -1,31 +1,29 @@
 # OpenForge category status (updated each phase)
 
-Honest state of each circuit category. **"Working" means a real ngspice run
-produces measured specs in range and `make smoke` reaches fitness=1.**
+Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes.py`.
 
-| Category | State | Notes |
-|----------|-------|-------|
-| opamp | working | Two-stage Miller; sizer pushes PM to spec (default PM ~15° is intentional — under-compensated seed) |
-| comparator | working | Input-referred Vos via DC sweep; transient tp/trise/tfall; output switches |
-| switch | working | RON via load current; AC −3 dB BW; fixed `{LN}` ngspice param parse bug |
-| charge_pump | working | Dickson ladder; fixed duplicate `C0`; vout/ripple/settle measured |
-| vref | **deferred (Phase 3)** | Real ~1.2 V bandgap needs SKY130 parasitic BJTs — not achievable on level-1 MOS |
+| Category | State | Datasheet bar | Notes |
+|----------|-------|---------------|-------|
+| comparator | **working** | RS8901: tp<1µs vos<3mV iq<1µA | Nano-Iref search + inverted-output delay bench; smoke meets_all ✓ |
+| opamp | **working** | RS321: gbp=1.1MHz pm>60 aol>95dB iq<80µA | budget=200 seed=42; default PM~15° is seed only — sizer pushes PM |
+| switch | **blocked-phase3** | RS2105: ron<50Ω ton/toff<20ns | Sized ron≈315Ω (Wn=2000µm); level-1 NMOS-only pass path |
+| charge_pump | **blocked-phase3** | RS2660: vout=5V ripple<50mV | Best sized vout≈4.29V; diode Vf loss on level-1 — needs MOS-switch pump |
+| vref | **deferred (Phase 3)** | RS431 bandgap | SKY130 parasitic BJTs required |
 
-## Why vref is deferred
+## blocked-phase3 findings
 
-Bandgap ~1.2 V is a **silicon junction property** (V_BE + PTAT). Bundled level-1
-MOSFET models have no BJT, no meaningful tempco, and hard-coded VTO. Stacking
-diode-connected MOS or resistor dividers can hit 1.2 V cosmetically but cannot
-validate line regulation or tempco. **Do not build a fake bandgap in dev mode.**
+**switch / ron<50Ω:** Transmission gate Ron scales weakly with W (50µm→10mm gives ~360Ω→315Ω)
+because only the NMOS leg carries current at 2.5V common-mode; PMOS `@mp[id]≈0` with bulk at
+vdd or sig. This is a level-1 body-effect / pass-device modeling limit, not a sizer bound issue.
 
-## Known limits
-
-- Bundled level-1 models: indicative for opamp/comparator/switch/charge_pump only.
-- ngspice smoke requires WSL/Linux with ngspice on PATH; CI runs pytest only.
+**charge_pump / vout=5V:** Output is stuck at ~4.2–4.7V regardless of stages (1–4) or diode
+`IS` tuning. The Dickson ladder anchored at `vdd` still loses ~0.3–0.8V per stage to diode
+`Vf`; bootstrapped MOS switches (or process Schottky models) are required to close a 5% window
+on a 5V target.
 
 ## Verification
 
 ```bash
-make test          # pytest (scoring + parsing; no ngspice required)
-make smoke-wsl     # 4 dev-mode categories (excludes vref)
+make test
+make smoke-wsl     # comparator + opamp pass; switch + charge_pump fail honestly
 ```
