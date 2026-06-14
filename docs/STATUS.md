@@ -2,26 +2,22 @@
 
 Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes.py`.
 
-| Category | Bundled | SKY130 | Notes |
-|----------|---------|--------|-------|
-| opamp | ✅ working | ✅ working | level-1 calibrated |
-| comparator | ✅ working | ✅ working | 2 forge winners confirmed |
-| switch | ⚠️ partial | ⚠️ partial | RON ~4–23Ω after PMOS S/D fix (was 678Ω); target <50Ω |
-| charge_pump | ❌ partial | ❌ partial | vout 4.29V/3.88V < 4.75V bar |
-| ldo | ⚠️ partial | ⚠️ partial | vout ✅ iq ✅ reg bench ✅ (dropout/line/load all measured) |
-| vref | ⏸ deferred | ⚠️ partial | needs BJT on bundled; SKY130 bandgap ok |
+## Phase 3 Status (2026-06-15)
 
-## Forge fitness gate (Phase 4 gate)
+| Category    | Bundled | SKY130  | Notes                              |
+|-------------|---------|---------|-------------------------------------|
+| opamp       | ✅      | ✅      | AOL=107dB GBP=1.09MHz PM=76°       |
+| comparator  | ✅      | ✅      | tp=0.19µs Vos=0.30mV Iq=0.62µA    |
+| switch      | ✅      | ✅      | RON=13Ω BW=167MHz                  |
+| ldo         | ✅      | ✅      | vout=3.3V reg bench all measured   |
+| charge_pump | ✅      | ✅      | vout=5.0V bootstrapped NMOS Dickson|
+| vref        | ⏸      | ⚠️      | BJT needed; deferred to Phase 3.5  |
 
-- Forge mutates **topology params** (not raw seed netlists)
-- **Winners include `netlist` field** (same content as `output`) — training data complete
-- 2+ winners with `fitness=1` and real `measured_specs`
-
-## Fixes (2026-06-15)
-
-1. **winners.jsonl** — `DatasetWriter` now writes `netlist` key on winner records
-2. **LDO reg bench** — separate DC decks with `.control dc …; meas dc …` (line/load/dropout)
-3. **Switch RON** — PMOS pass device S/D corrected (source=sig, drain=out); RON 678Ω→~4Ω
+## Forge Status
+- Loop: ✅ topology param mutation → RS fitness gate → winners.jsonl
+- Winners: 238 total (charge_pump=93, ldo=94, switch=34, comparator=17) with netlist + measured_specs
+- Training corpus: NOT YET — need ≥500 winners before finetuning
+- Phase 4: OPEN — corpus scale-up in progress (238/500+ target)
 
 ## Verification
 
