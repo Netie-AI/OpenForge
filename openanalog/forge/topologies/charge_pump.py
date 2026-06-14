@@ -15,7 +15,7 @@ from openanalog.forge.topologies.base import (
 )
 
 
-from openanalog.sim.models import resolve_models
+from openanalog.sim.models import resolve_models, mos_line
 
 
 @dataclass
@@ -78,7 +78,7 @@ def _build_diode_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
 
 
 def _build_mos_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
-    """Bootstrapped MOS-switch Dickson for SKY130 (low Vf loss)."""
+    """NMOS-switch Dickson for SKY130 (clk-gated pass FETs, no diode Vf)."""
     ms = resolve_models()
     stages = max(2, min(int(p.stages), 4))
     period = 1.0 / p.freq_Hz
@@ -87,25 +87,22 @@ def _build_mos_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
     tstop = period * 400.0
     w = p.w_switch
 
-    cap_lines = [f"C1 vdd n1 {p.cap_F}"]
+    cap_lines = [f"Cfly1 vdd n1 {p.cap_F}"]
     for i in range(2, stages + 1):
-        cap_lines.append(f"C{i} n{i-1} n{i} {p.cap_F}")
+        cap_lines.append(f"Cfly{i} n{i-1} n{i} {p.cap_F}")
     cap_lines.append(f"Cout n{stages} 0 {p.cap_F * 2}")
 
     switch_lines = []
     for i in range(stages):
         clk = f"clk{(i % 2) + 1}"
         left = "vdd" if i == 0 else f"n{i}"
-        switch_lines.append(
-            f"M{i}a {left} {clk} n{i+1} 0 {ms.nmos} W={w}u L=0.5u"
-        )
-        switch_lines.append(
-            f"M{i}b {clk} n{i+1} n{i+1} n{i+1} {ms.nmos} W={w}u L=0.5u"
-        )
+        nxt = f"n{i+1}"
+        # Pass FET: conducts when clk high (left -> nxt)
+        switch_lines.append(mos_line(f"sw{i}", left, clk, nxt, "0", "n", w=f"{w}u", l="0.5u", ms=ms))
 
     body = "\n".join(
         [
-            f"* OpenForge MOS Dickson charge pump ({stages} stages, SKY130)",
+            f"* OpenForge NMOS Dickson ({stages} stages, SKY130)",
             ms.block,
             f"Vsup vdd 0 {supply_V}",
             f"Vclk1 clk1 0 pulse(0 {supply_V} 0 1n 1n {half} {period})",
@@ -119,7 +116,7 @@ def _build_mos_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
             f"meas tran vout_avg avg v(n{stages}) from={tstop * 0.7} to={tstop}",
             f"meas tran ripple_pp pp v(n{stages}) from={tstop * 0.7} to={tstop}",
             f"meas tran isupp_avg avg i(vsup) from={tstop * 0.7} to={tstop}",
-            f"meas tran settle when v(n{stages})={supply_V * 0.95} rise=1",
+            f"meas tran settle when v(n{stages})={supply_V * 0.9} rise=1",
             "print isupp_avg",
             "print vout_avg",
             "print ripple_pp",
