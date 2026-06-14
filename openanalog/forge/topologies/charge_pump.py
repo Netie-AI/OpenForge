@@ -27,22 +27,23 @@ class ChargePumpParams:
 
 
 def _build_tran_deck(p: ChargePumpParams, supply_V: float) -> str:
-    stages = max(1, min(int(p.stages), 4))
+    stages = max(2, min(int(p.stages), 4))
     period = 1.0 / p.freq_Hz
     half = period / 2.0
     tstep = period / 200.0
     tstop = period * 400.0
 
-    # Dickson ladder: n0=vdd, pump caps C1..Cn between nodes, diodes to clocks
-    cap_lines = [f"Cin n0 vdd {p.cap_F}"]
-    for i in range(1, stages + 1):
+    # Dickson ladder anchored at vdd (not a floating n0 node).
+    cap_lines = [f"C1 vdd n1 {p.cap_F}"]
+    for i in range(2, stages + 1):
         cap_lines.append(f"C{i} n{i-1} n{i} {p.cap_F}")
     cap_lines.append(f"Cout n{stages} 0 {p.cap_F * 2}")
 
     diode_lines = []
     for i in range(stages):
         clk = f"clk{(i % 2) + 1}"
-        diode_lines.append(f"D{i} n{i} {clk} Dmod")
+        left = "vdd" if i == 0 else f"n{i}"
+        diode_lines.append(f"D{i} {left} {clk} Dmod")
         diode_lines.append(f"D{i}b {clk} n{i+1} Dmod")
 
     body = "\n".join(
@@ -82,10 +83,10 @@ class ChargePumpTopology(Topology):
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
         return {
-            "stages": (1.0, 3.0, False),
+            "stages": (2.0, 4.0, False),
             "cap_F": (10e-9, 500e-9, True),
-            "freq_Hz": (50e3, 2e6, True),
-            "rload_ohm": (1e3, 50e3, True),
+            "freq_Hz": (100e3, 3e6, True),
+            "rload_ohm": (5e3, 100e3, True),
         }
 
     def measurable_specs(self) -> set[str]:
@@ -94,6 +95,12 @@ class ChargePumpTopology(Topology):
     def measure(
         self, params: ChargePumpParams, *, supply_V: float = 5.0, cload_F: float = 10e-12, with_full: bool = True
     ) -> TopologyMetrics:
+        params = ChargePumpParams(
+            stages=max(2, int(params.stages)),
+            cap_F=max(params.cap_F, 10e-9),
+            freq_Hz=max(params.freq_Hz, 10e3),
+            rload_ohm=max(params.rload_ohm, 1e3),
+        )
         m = TopologyMetrics()
         ok, out = run_ngspice(_build_tran_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 45))
         m.raw = out[-3000:]
