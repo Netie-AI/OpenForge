@@ -13,6 +13,7 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
+from openanalog.forge.blocks.comparator_core import emit as emit_comparator_core
 from openanalog.sim.models import ResolvedModels, resolve_models
 
 
@@ -49,19 +50,7 @@ def _params_block(p: ComparatorParams, supply_V: float) -> str:
 """
 
 def _core(ms: ResolvedModels) -> str:
-    return f"""
-VSUP vdd 0 {{VDD}}
-Iref vdd nb {{IREF}}
-M8 nb nb 0 0 {ms.nmos} W={{Wb}} L={{Lb}}
-M5 tail nb 0 0 {ms.nmos} W={{W5}} L={{L5}}
-M7 vout nb 0 0 {ms.nmos} W={{W7}} L={{L7}}
-M1 n1    vinp tail 0 {ms.nmos} W={{W1}} L={{L1}}
-M2 nout1 vinn tail 0 {ms.nmos} W={{W1}} L={{L1}}
-M3 n1    n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
-M4 nout1 n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
-M6 vout nout1 vdd vdd {ms.pmos} W={{W6}} L={{L6}}
-Rload vout 0 {{RLOAD}}
-"""
+    return "\n" + emit_comparator_core(ms).netlist + "\n"
 
 
 def _build_op_deck(p: ComparatorParams, supply_V: float) -> str:
