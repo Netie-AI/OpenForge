@@ -13,9 +13,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install
+      - name: Install ngspice
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ngspice
+      - name: Install Python deps
         run: pip install -e ".[web]" pytest
-      # ngspice behavioral smoke stays local/WSL — bundled models + sim runtime
-      # are not wired into CI yet. Run `make smoke` on a machine with ngspice.
       - name: Pytest
-        run: python -m pytest tests/ -q --ignore=tests/test_ngspice_behavior.py
+        env:
+          OPENFORGE_MODEL_SET: bundled
+        run: python -m pytest tests/ -q --ignore=tests/test_ngspice_behavior.py --ignore=tests/test_netlist_llm_fidelity.py

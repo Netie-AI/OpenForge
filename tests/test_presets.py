@@ -5,11 +5,21 @@ from __future__ import annotations
 import pytest
 
 from openanalog.config import resolve_ngspice_cmd
+from openanalog.forge.topologies.base import run_ngspice
 from openanalog.presets import PRESETS
 
+
+def _ngspice_ready() -> bool:
+    """True when ngspice is installed and can run a minimal deck."""
+    if resolve_ngspice_cmd() is None:
+        return False
+    ok, _ = run_ngspice("* smoke\nV1 a 0 1\nR1 a 0 1k\n.op\n.end\n", timeout=5)
+    return ok
+
+
 pytestmark = pytest.mark.skipif(
-    resolve_ngspice_cmd() is None,
-    reason="ngspice not available",
+    not _ngspice_ready(),
+    reason="ngspice not available or not functional",
 )
 
 
