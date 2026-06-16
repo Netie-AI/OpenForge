@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from openanalog.config import NGSPICE_TIMEOUT, resolve_ngspice_cmd
+from openanalog.config import NGSPICE_TIMEOUT, ngspice_path_arg, resolve_ngspice_cmd
 
 from openanalog.sim.models import ResolvedModels, resolve_models, set_active_model_set
 
@@ -43,7 +43,7 @@ def run_ngspice(deck: str, *, timeout: int | None = None) -> tuple[bool, str]:
         path = Path(tmp.name)
     try:
         r = subprocess.run(
-            [*cmd, "-b", str(path)],
+            [*cmd, "-b", ngspice_path_arg(path, cmd)],
             capture_output=True,
             text=True,
             timeout=timeout or NGSPICE_TIMEOUT,
@@ -123,6 +123,9 @@ def get_topology(circuit_type: str) -> Topology:
         "bandgap": "vref",
         "ldo": "ldo",
         "linear_regulator": "ldo",
+        "multiplier": "multiplier",
+        "analog_multiplier": "multiplier",
+        "gilbert": "multiplier",
     }
     key = aliases.get(key, key)
     if key not in REGISTRY:

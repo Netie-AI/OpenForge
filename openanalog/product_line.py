@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from openanalog.forge.spec_envelopes import DEV_MODE_SPECS, VREF_PHASE3_SPEC
+from openanalog.forge.spec_envelopes import DEV_MODE_SPECS, VREF_PHASE3_SPEC, MULTIPLIER_EXPERIMENTAL_SPEC
 
 
 @dataclass(frozen=True)
@@ -283,6 +283,57 @@ Bias: 1/3
 """,
         inline_spec="type=lcd_controller segments=160",
         keywords=("lcd controller", "lcd driver", "segment driver", "rs8800"),
+    ),
+    ProductType(
+        id="analog_multiplier",
+        label="Analog Multiplier",
+        family="Compute",
+        topology="multiplier",
+        status="partial",
+        part="RS7001",
+        sample="""RS7001 Four-Quadrant Analog Multiplier (Gilbert Cell)
+SUPPLY VS=5V
+Transfer Function: Vout proportional to Vx * Vy
+Gain Error: < 15 %
+Bandwidth: 1 MHz
+Quiescent Current: 150 uA
+Output Swing: 0.5 V differential
+Use: mixers, analog MAC tiles, control loops — direct product without digital multiply chain
+""",
+        inline_spec=MULTIPLIER_EXPERIMENTAL_SPEC,
+        keywords=("multiplier", "gilbert", "analog multiply", "four quadrant", "rs7001", "mixer"),
+    ),
+    ProductType(
+        id="analog_mac",
+        label="Vector-Matrix MAC",
+        family="Compute",
+        topology=None,
+        status="planned",
+        part="RS7100",
+        sample="""RS7100 Analog MAC Crossbar Tile
+SUPPLY VS=5V
+8x8 Gilbert-cell crossbar
+Direct dot-product on output bus — no intermediate digital multiplies
+Target: edge inference, sensor fusion, analog AI accelerator
+""",
+        inline_spec="type=multiplier gain_err<10% bw>5MHz",
+        keywords=("mac", "matrix multiply", "crossbar", "analog ai", "rs7100", "dot product"),
+    ),
+    ProductType(
+        id="analog_compute_tile",
+        label="Analog Compute Tile",
+        family="Compute",
+        topology=None,
+        status="planned",
+        part="RS7200",
+        sample="""RS7200 Analog Compute Tile
+SUPPLY VS=5V
+16x16 multiply-accumulate array
+In-memory analog compute — final product emerges on shared output line
+Replaces digital MAC pipeline for moderate-precision workloads
+""",
+        inline_spec="type=multiplier gain_err<8% bw>10MHz iq<500uA",
+        keywords=("analog compute", "in-memory", "mac array", "rs7200", "analog digital"),
     ),
 ]
 

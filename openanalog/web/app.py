@@ -16,10 +16,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from openanalog.config import MODEL_SET, ROOT
+from openanalog.corpus_stats import achievable_ranges_payload
 from openanalog.product_line import PRODUCT_LINE, get_product, product_line_payload
 from openanalog.interface.designer import design, verify_preset
 from openanalog.llm import available_providers
 from openanalog.presets import PRESETS, presets_payload
+from openanalog.use_cases import use_cases_payload
 
 app = FastAPI(title="OpenForge EDA")
 
@@ -82,6 +84,8 @@ METRIC_LABELS: dict[str, tuple[str, str, int]] = {
     "vref_V": ("Vref", "V", 3),
     "line_reg_mV": ("Line reg", "mV", 2),
     "tempco_ppm": ("Tempco", "ppm", 0),
+    "gain_err_pct": ("Gain err", "%", 1),
+    "output_swing_V": ("Out swing", "V", 3),
 }
 
 
@@ -137,6 +141,8 @@ def api_meta() -> dict[str, Any]:
         ],
         "model_sets": ["bundled", "sky130"],
         "default_model_set": MODEL_SET,
+        "achievable_ranges": achievable_ranges_payload(),
+        **use_cases_payload(),
         "version": {
             "git_hash": _git_short_hash(),
             "build_date": _build_date(),
@@ -336,7 +342,9 @@ INDEX_HTML = r"""<!doctype html>
   *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0a0d13,#0b0e14);color:var(--txt);font-family:Inter,system-ui,sans-serif;font-size:14px}
   header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:5}
   .logo{font-weight:800;font-size:18px} .logo span{color:var(--acc)} .tag{color:var(--dim);font-size:12px}
-  .wrap{display:grid;grid-template-columns:400px 1fr;gap:16px;padding:16px;max-width:1600px;margin:0 auto}
+  .wrap{display:grid;grid-template-columns:400px 1fr 320px;gap:16px;padding:16px;max-width:1900px;margin:0 auto}
+  @media(max-width:1200px){.wrap{grid-template-columns:400px 1fr}}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
   h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
   textarea{width:100%;height:220px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical}
@@ -374,6 +382,18 @@ INDEX_HTML = r"""<!doctype html>
   .ptype.planned{opacity:.55;border-style:dashed}
   .ptype .st{font-size:9px;margin-left:4px;opacity:.8}
   .fam-label{width:100%;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-top:6px}
+  .section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .section h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+  .ucard{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer}
+  .ucard:hover{border-color:var(--acc2)}
+  .ucard.active{border-color:var(--acc);background:rgba(90,209,201,.06)}
+  .ucard .utitle{font-weight:700;font-size:13px;margin-bottom:4px}
+  .ucard .usum{font-size:12px;color:var(--dim);line-height:1.4}
+  .ucard .utags{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+  .utag{font-size:10px;padding:2px 6px;border-radius:10px;background:rgba(122,162,255,.12);color:var(--acc2)}
+  .range-row{font-size:12px;padding:4px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+  .range-row .rk{color:var(--dim);font-family:var(--mono);font-size:11px}
+  .range-note{font-size:11px;color:var(--ok);margin-top:6px}
 </style>
 </head>
 <body>
@@ -450,14 +470,83 @@ INDEX_HTML = r"""<!doctype html>
       </div>
     </div>
   </div>
+  <div class="panel" id="sidePanel">
+    <h3>Applications</h3>
+    <div id="useCases" class="muted">Loading…</div>
+    <div class="section">
+      <h4>Achievable ranges (forge corpus)</h4>
+      <div id="achievableRanges" class="muted">Loading…</div>
+    </div>
+  </div>
 </div>
 <footer style="text-align:center;padding:10px;color:var(--dim);font-size:11px;border-top:1px solid var(--line)">
   <span id="footerVer">OpenForge</span>
 </footer>
 <script>
 const $=s=>document.querySelector(s);
-let META={}, lastNetlist='', lastResult={}, activeProduct='opamp';
+let META={}, lastNetlist='', lastResult={}, activeProduct='opamp', activeUseCase='';
 const fmt=(v,d=2)=>v==null?'—':(typeof v==='number'?v.toFixed(d):v);
+
+function fmtRange(m){
+  if(!m)return '—';
+  return `${fmt(m.min,3)} – ${fmt(m.max,3)} (med ${fmt(m.median,3)})`;
+}
+
+function renderUseCases(){
+  const cases=META.use_cases||[];
+  if(!cases.length){$('#useCases').textContent='No use cases';return;}
+  $('#useCases').innerHTML=cases.map(u=>{
+    const cls=u.id===activeUseCase?'ucard active':'ucard';
+    const tags=(u.tags||[]).map(t=>`<span class="utag">${t}</span>`).join('');
+    return `<div class="${cls}" data-uc="${u.id}">
+      <div class="utitle">${u.title}</div>
+      <div class="usum">${u.summary}</div>
+      <div class="utags">${tags}</div>
+    </div>`;
+  }).join('');
+  $('#useCases').querySelectorAll('.ucard').forEach(el=>el.onclick=()=>selectUseCase(el.dataset.uc));
+}
+
+function selectUseCase(id){
+  activeUseCase=id;
+  const u=(META.use_cases||[]).find(x=>x.id===id);
+  if(!u)return;
+  renderUseCases();
+  if(u.product_ids&&u.product_ids[0])selectProduct(u.product_ids[0]);
+  if(u.preset_ids&&u.preset_ids[0]){
+    $('#preset').value=u.preset_ids[0];
+    const p=META.presets.find(x=>x.id===u.preset_ids[0]);
+    if(p){$('#cat').value=p.category;$('#inp').value=p.spec;$('#budget').value=p.budget;$('#budgetv').textContent=p.budget;}
+  }
+  renderAchievableRanges(u.highlight_metrics||[]);
+}
+
+function renderAchievableRanges(highlight){
+  const ar=META.achievable_ranges||{};
+  const cats=ar.categories||{};
+  const p=(META.product_line?.products||[]).find(x=>x.id===activeProduct);
+  const topo=p?.topology||$('#cat').value;
+  const cat=cats[topo];
+  if(!cat){
+    $('#achievableRanges').innerHTML=`<div class="muted">${ar.fitness1_count||0} fitness=1 winners · select a designable product</div>`;
+    return;
+  }
+  const hi=new Set(highlight||['iq_uA','iout_mA']);
+  const keys=Object.keys(cat.metrics||{}).sort((a,b)=>{
+    const ah=hi.has(a)?0:1, bh=hi.has(b)?0:1;
+    return ah-bh||a.localeCompare(b);
+  });
+  let html=`<div class="muted">${cat.part||topo} · ${cat.winner_count} winners</div>`;
+  if(cat.envelope)html+=`<div class="muted" style="margin:4px 0">Target: <span class="mono">${cat.envelope}</span></div>`;
+  keys.slice(0,8).forEach(k=>{
+    const m=cat.metrics[k];
+    const L=(META.metric_labels&&META.metric_labels[k])||{label:k,unit:''};
+    const bold=hi.has(k)?'font-weight:700':'';
+    html+=`<div class="range-row"><span class="rk" style="${bold}">${L.label||k}</span><span>${fmtRange(m)} ${L.unit||''}</span></div>`;
+  });
+  if(cat.low_power_note)html+=`<div class="range-note">${cat.low_power_note}</div>`;
+  $('#achievableRanges').innerHTML=html;
+}
 
 function statusTag(st){
   if(st==='available')return '';
@@ -491,6 +580,7 @@ function selectProduct(id){
   $('#btnGo').disabled=planned;
   $('#status').textContent=planned?`${p.label}: simulation backend coming soon`:'';
   if(p.sample)$('#inp').value=p.sample;
+  renderAchievableRanges();
 }
 
 async function loadMeta(){
@@ -507,6 +597,8 @@ async function loadMeta(){
     $('#footerVer').textContent=`PDK: ${$('#modelset').value} · git ${META.version.git_hash} · ${META.version.build_date}`;
   }
   renderSuiteTable(META.presets||[]);
+  renderUseCases();
+  renderAchievableRanges();
 }
 $('#budget').oninput=e=>$('#budgetv').textContent=e.target.value;
 $('#preset').onchange=()=>{

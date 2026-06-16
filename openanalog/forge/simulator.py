@@ -25,7 +25,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from openanalog.config import NGSPICE_TIMEOUT, resolve_ngspice_cmd
+from openanalog.config import NGSPICE_TIMEOUT, ngspice_path_arg, resolve_ngspice_cmd
 from openanalog.ingestion.converter import normalize_for_forge, prepare_seed_deck
 from openanalog.sim.ngspice import check_syntax
 
@@ -128,6 +128,44 @@ def is_simulatable(netlist: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def circuit_only_netlist(netlist: str) -> str:
+    """Strip simulation harness; keep circuit topology ending in .end."""
+    lines_out: list[str] = []
+    in_control = False
+    for line in netlist.splitlines():
+        s = line.strip()
+        sl = s.lower()
+        if sl.startswith(".control") or sl.startswith("* .control"):
+            in_control = True
+            continue
+        if sl.startswith(".endc") or sl.startswith("* .endc"):
+            in_control = False
+            continue
+        if in_control:
+            continue
+        if sl.startswith(
+            (
+                ".tran",
+                ".ac",
+                ".dc ",
+                ".noise",
+                ".meas",
+                ".measure",
+                "meas ",
+                "set ",
+                "print ",
+                ".print",
+                ".op",
+            )
+        ):
+            continue
+        if sl == ".end":
+            continue
+        lines_out.append(line)
+    body = "\n".join(lines_out).strip()
+    return f"{body}\n.end\n" if body else netlist
+
+
 def _strip_existing_analysis(netlist: str) -> str:
     """Remove any existing .tran/.ac/.dc/.measure/.end lines so we control them."""
     lines = []
@@ -186,7 +224,7 @@ def _run_ngspice(netlist_text: str, timeout: int = NGSPICE_TIMEOUT) -> tuple[boo
 
     try:
         result = subprocess.run(
-            cmd + ["-b", str(tmp_path)],
+            cmd + ["-b", ngspice_path_arg(tmp_path, cmd)],
             capture_output=True,
             text=True,
             timeout=timeout,

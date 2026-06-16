@@ -24,6 +24,7 @@ ELECTRICAL_FIELDS: dict[str, tuple[str, ...]] = {
     "charge_pump": ("vout_V", "ripple_mV", "settle_ms", "iout_mA", "iq_uA"),
     "vref": ("vref_V", "line_reg_mV", "tempco_ppm", "iq_uA"),
     "ldo": ("vout_V", "dropout_mV", "line_reg_mV", "load_reg_mV", "iq_uA", "psrr_dB"),
+    "multiplier": ("gain_err_pct", "bw_MHz", "iq_uA", "output_swing_V"),
 }
 
 EDGE_TYPES: tuple[str, ...] = (

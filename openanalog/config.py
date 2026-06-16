@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import subprocess
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -62,6 +63,15 @@ def is_wsl() -> bool:
         return False
 
 
+def ngspice_path_arg(sp_path: Path, cmd: list[str]) -> str:
+    """Convert a Windows path when invoking ngspice through WSL."""
+    if cmd and cmd[0].lower() == "wsl":
+        s = str(sp_path.resolve()).replace("\\", "/")
+        if len(s) >= 2 and s[1] == ":":
+            return f"/mnt/{s[0].lower()}{s[2:]}"
+    return str(sp_path)
+
+
 def resolve_ngspice_cmd() -> list[str] | None:
     """
     Resolve an ngspice executable appropriate for the current environment.
@@ -69,15 +79,32 @@ def resolve_ngspice_cmd() -> list[str] | None:
     Master-plan rules:
     - WSL: /usr/bin/ngspice
     - Windows native: C:/msys64/mingw64/bin/ngspice.exe (if installed)
+    - Windows + WSL: wsl /usr/bin/ngspice when MSYS ngspice is absent
     - Linux: `which ngspice`
+    - Override: NGSPICE_CMD env (space-separated argv prefix)
     """
+    override = os.getenv("NGSPICE_CMD", "").strip()
+    if override:
+        return override.split()
     sys = platform.system().lower()
     if is_wsl():
         p = Path("/usr/bin/ngspice")
         return [str(p)] if p.exists() else None
     if sys == "windows":
         p = Path("C:/msys64/mingw64/bin/ngspice.exe")
-        return [str(p)] if p.exists() else None
+        if p.exists():
+            return [str(p)]
+        try:
+            r = subprocess.run(
+                ["wsl", "test", "-x", "/usr/bin/ngspice"],
+                capture_output=True,
+                timeout=5,
+            )
+            if r.returncode == 0:
+                return ["wsl", "/usr/bin/ngspice"]
+        except Exception:
+            pass
+        return None
     # linux / darwin — only return a path that actually exists
     for p in (Path("/usr/bin/ngspice"), Path("/bin/ngspice")):
         if p.exists():

@@ -49,6 +49,9 @@ _DEFAULT_MODES: dict[str, dict[str, str]] = {
     "vref": {
         "vref_V": "target", "line_reg_mV": "max", "tempco_ppm": "max", "iq_uA": "max",
     },
+    "multiplier": {
+        "gain_err_pct": "max", "bw_MHz": "min", "iq_uA": "max", "output_swing_V": "min",
+    },
 }
 
 _INLINE_PATTERNS: dict[str, dict[str, str]] = {
@@ -94,6 +97,12 @@ _INLINE_PATTERNS: dict[str, dict[str, str]] = {
         "line_reg_mV": r"line[_\s-]*reg\s*([<>=]?)\s*([\d.]+)\s*mV",
         "tempco_ppm": r"tempco\s*([<>=]?)\s*([\d.]+)\s*ppm",
         "iq_uA": r"iq\s*([<>=]?)\s*([\d.]+)\s*uA",
+    },
+    "multiplier": {
+        "gain_err_pct": r"gain[_\s-]*err\s*([<>=]?)\s*([\d.]+)\s*%",
+        "bw_MHz": r"bw\s*([<>=]?)\s*([\d.]+)\s*MHz",
+        "iq_uA": r"iq\s*([<>=]?)\s*([\d.]+)\s*uA",
+        "output_swing_V": r"output[_\s-]*swing\s*([<>=]?)\s*([\d.]+)\s*V",
     },
 }
 

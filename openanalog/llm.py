@@ -25,8 +25,18 @@ from openanalog.config import (
     OPENFORGE_LLM_PROVIDER,
     OPENFORGE_SEA_LION_MODEL,
     OPENROUTER_API_KEY,
+    ROOT,
     SEA_LION_API_KEY,
 )
+
+OPENFORGE_LORA_PATH = ROOT / "models" / "openforge-lora-v1"
+NETLIST_SYSTEM = (
+    "You are an analog IC design assistant. Given a specification, "
+    "output a valid ngspice SPICE netlist for a circuit that meets the spec. "
+    "Output only the netlist, no explanation."
+)
+
+_lora_bundle: tuple[Any, Any] | None = None
 
 PROVIDER_DEFAULTS: dict[str, str] = {
     "anthropic": OPENFORGE_CLAUDE_MODEL,
@@ -54,9 +64,120 @@ def _parse_json(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
+def lora_available() -> bool:
+    """True when finetuned adapter weights are present locally."""
+    return (OPENFORGE_LORA_PATH / "adapter_config.json").exists()
+
+
+def _load_lora_bundle() -> tuple[Any, Any]:
+    global _lora_bundle
+    if _lora_bundle is not None:
+        return _lora_bundle
+    if not lora_available():
+        raise RuntimeError(
+            f"LoRA adapter not found at {OPENFORGE_LORA_PATH}. "
+            "Download openforge-lora-v1.tar.gz from Lambda and extract to models/."
+        )
+    import torch
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    base_id = "Qwen/Qwen2.5-Coder-7B-Instruct"
+    tokenizer = AutoTokenizer.from_pretrained(base_id, trust_remote_code=True)
+    base_model = AutoModelForCausalLM.from_pretrained(
+        base_id,
+        torch_dtype=torch.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    model = PeftModel.from_pretrained(base_model, str(OPENFORGE_LORA_PATH))
+    model.eval()
+    _lora_bundle = (model, tokenizer)
+    return _lora_bundle
+
+
+def generate_netlist_api(
+    spec: dict[str, Any],
+    topology: str,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    few_shot: bool = True,
+    repair: bool = True,
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    """Generate netlist via API + prompt/harness (no GPU). Optional LoRA alternative."""
+    from openanalog.netlist_llm import (
+        generate_netlist_api as _api,
+        generate_netlist_with_repair,
+    )
+
+    if repair:
+        return generate_netlist_with_repair(
+            spec,
+            topology,
+            provider=provider,
+            model=model,
+            max_attempts=max_attempts,
+            few_shot=few_shot,
+        )
+    return _api(
+        spec,
+        topology,
+        provider=provider,
+        model=model,
+        few_shot=few_shot,
+    )
+
+
+def _spec_to_netlist_prompt(topology: str, measured_specs: dict[str, Any]) -> str:
+    from openanalog.netlist_llm import _spec_prompt
+
+    return _spec_prompt(topology, {"measured_specs": measured_specs})
+
+
+def generate_netlist_local(
+    spec: dict[str, Any],
+    topology: str,
+    *,
+    max_new_tokens: int = 512,
+    temperature: float = 0.1,
+) -> str:
+    """Use finetuned LoRA for local netlist generation (no API cost)."""
+    import torch
+
+    model, tokenizer = _load_lora_bundle()
+    measured = spec.get("measured_specs") or spec.get("targets") or spec
+    if "targets" in measured:
+        measured = {
+            k: (v.get("value") if isinstance(v, dict) else v)
+            for k, v in measured.items()
+        }
+    messages = [
+        {"role": "system", "content": NETLIST_SYSTEM},
+        {"role": "user", "content": _spec_to_netlist_prompt(topology, measured)},
+    ]
+    input_text = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            do_sample=temperature > 0,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+    return tokenizer.decode(
+        outputs[0][inputs.input_ids.shape[1] :], skip_special_tokens=True
+    ).strip()
+
+
 def available_providers() -> list[ProviderInfo]:
     """Return providers with keys configured."""
     checks = [
+        ("lora", "OpenForge LoRA (local)", "local", "openforge-lora-v1"),
         ("openrouter", "OpenRouter (GPT)", OPENROUTER_API_KEY, OPENFORGE_GPT_MODEL),
         ("anthropic", "Anthropic Claude", ANTHROPIC_API_KEY, OPENFORGE_CLAUDE_MODEL),
         ("openai", "OpenAI", OPENAI_API_KEY, "gpt-4.1"),
@@ -64,7 +185,7 @@ def available_providers() -> list[ProviderInfo]:
         ("sea-lion", "SEA-LION", SEA_LION_API_KEY, OPENFORGE_SEA_LION_MODEL),
     ]
     return [
-        ProviderInfo(id=pid, label=label, model=model, available=bool(key))
+        ProviderInfo(id=pid, label=label, model=model, available=bool(key) if pid != "lora" else lora_available())
         for pid, label, key, model in checks
     ]
 
@@ -89,6 +210,8 @@ def _fallback_chain(preferred: str | None) -> list[str]:
 
 
 def _provider_has_key(provider: str) -> bool:
+    if provider == "lora":
+        return lora_available()
     return {
         "anthropic": bool(ANTHROPIC_API_KEY),
         "openrouter": bool(OPENROUTER_API_KEY),
@@ -185,6 +308,8 @@ def ask_text(
             continue
         mdl = _resolve_model(prov, model if prov == (provider or prov) else None)
         try:
+            if prov == "lora":
+                raise RuntimeError("ask_text does not support lora — use generate_netlist_local()")
             if prov == "anthropic":
                 text = _call_anthropic(system, user, mdl, image_path)
             elif prov == "openrouter":

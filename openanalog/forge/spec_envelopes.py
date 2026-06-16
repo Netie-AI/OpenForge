@@ -22,6 +22,7 @@ DATASHEET_PARTS: dict[str, str] = {
     "charge_pump": "RS2660",
     "vref": "RS431",
     "ldo": "RS3001",
+    "multiplier": "RS7001",
 }
 
 # Dev-mode categories: achievable targets on bundled level-1 models (in principle).
@@ -37,3 +38,8 @@ DEV_MODE_SPECS: dict[str, str] = {
 DEFERRED_CATEGORIES: list[str] = ["vref"]
 
 VREF_PHASE3_SPEC: str = "type=vref vref=1.2V line_reg<5mV iq<100uA"
+
+# Experimental — not in forge fitness gate until validated
+MULTIPLIER_EXPERIMENTAL_SPEC: str = (
+    "type=multiplier gain_err<15% bw>1MHz iq<200uA output_swing>0.1V"
+)

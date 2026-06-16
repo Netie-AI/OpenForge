@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from openanalog.config import NGSPICE_TIMEOUT, resolve_ngspice_cmd
+from openanalog.config import NGSPICE_TIMEOUT, ngspice_path_arg, resolve_ngspice_cmd
 
 
 def run_batch(netlist: str, *, timeout: int | None = None) -> tuple[bool, str]:
@@ -20,7 +20,7 @@ def run_batch(netlist: str, *, timeout: int | None = None) -> tuple[bool, str]:
             tmp.write(deck)
             path = Path(tmp.name)
         r = subprocess.run(
-            [*cmd, "-b", str(path)],
+            [*cmd, "-b", ngspice_path_arg(path, cmd)],
             capture_output=True,
             text=True,
             timeout=timeout or NGSPICE_TIMEOUT,

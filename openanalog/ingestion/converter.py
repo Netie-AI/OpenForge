@@ -299,8 +299,8 @@ def _collect_circuit_nets(netlist: str) -> set[str]:
 def _driven_nets(deck: str) -> set[str]:
     driven = {"0", "vdd", "gnd"}
     for raw in deck.splitlines():
-        m = re.match(r"^\s*V(\w+)\s+(\S+)\s+(\S+)", raw, re.I)
-        if m:
+        m = re.match(r"^\s*(\S+)\s+(\S+)\s+(\S+)", raw, re.I)
+        if m and m.group(1)[0].upper() == "V":
             driven.add(m.group(2).lower())
             driven.add(m.group(3).lower())
     return driven
@@ -318,13 +318,36 @@ def _floating_pulldowns(netlist: str, driven: set[str]) -> list[str]:
     return lines
 
 
+def _vdd_voltage_source_name(netlist: str) -> str | None:
+    for raw in netlist.splitlines():
+        m = re.match(r"^\s*(\S+)\s+(\S+)\s+(\S+)", raw, re.I)
+        if not m:
+            continue
+        name, n1, _n2 = m.group(1), m.group(2), m.group(3)
+        if name[0].upper() == "V" and n1.lower() == "vdd":
+            return name
+    return None
+
+
+def _supply_current_expr(deck: str) -> str:
+    """ngspice expression for |I(Vdd)| from an existing or injected supply."""
+    name = _vdd_voltage_source_name(deck) or "VDD_SUPPLY"
+    return f"abs(i({name}))"
+
+
+def _supply_current_i(deck: str) -> str:
+    name = _vdd_voltage_source_name(deck) or "VDD_SUPPLY"
+    return f"i({name})"
+
+
 def prepare_seed_deck(netlist: str) -> str:
     """Wrap flat netlist with models, supply rails, bias stubs, and DC helpers for .op."""
     text = netlist.strip()
     needs_vdd = re.search(r"\bvdd\b", text, re.I) is not None
+    has_vdd_src = _vdd_voltage_source_name(text) is not None
 
     stubs: list[str] = []
-    if needs_vdd:
+    if needs_vdd and not has_vdd_src:
         stubs.append("VDD_SUPPLY vdd 0 DC 1.8")
 
     for i, net in enumerate(_collect_bias_nets(text)):
@@ -343,7 +366,7 @@ def prepare_seed_deck(netlist: str) -> str:
     if pulldowns:
         parts.extend(pulldowns)
 
-    if needs_vdd:
+    if needs_vdd and not has_vdd_src:
         parts.append(".ic v(vdd)=1.8")
     parts.append(".ic v(0)=0")
 

@@ -24,7 +24,16 @@ dependencies = [
 [project.optional-dependencies]
 ingest = ["marker-pdf>=0.2"]
 forge = ["pyspice>=1.5"]
-train = ["peft>=0.10", "transformers>=4.40", "torch>=2.1", "datasets>=2.18"]
+train = [
+    "peft>=0.10",
+    "transformers>=4.40",
+    "torch>=2.1",
+    "datasets>=2.18",
+    "trl>=1.6",
+    "accelerate>=0.28",
+    "bitsandbytes>=0.43",
+    "sentencepiece>=0.2",
+]
 web = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.5"]
 all = ["openanalog[ingest,forge,train,web]"]
 

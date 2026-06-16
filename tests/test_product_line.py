@@ -8,11 +8,12 @@ import pytest
 
 def test_product_line_has_runic_families():
     payload = product_line_payload()
-    assert payload["designable_count"] >= 5
-    assert payload["planned_count"] >= 5
+    assert payload["designable_count"] >= 6
+    assert payload["planned_count"] >= 7
     families = set(payload["families"].keys())
     assert "Amplifiers" in families
     assert "Power" in families
+    assert "Compute" in families
     assert "Data Converters" in families
 
 

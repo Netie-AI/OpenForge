@@ -47,7 +47,7 @@ def _clock_lines(p: ChargePumpParams, supply_V: float) -> tuple[list[str], list[
         names = ["phi1", "phi2", "phi3", "phi4"]
         delays = [0.0, quarter, half, 3 * quarter]
         lines = [
-            f"V{name} {name} 0 pulse(0 {supply_V} {delay} {tr} {tf} {half} {period})"
+            f"V{name} {name} 0 pulse(0 {supply_V} {delay} {tr} {tf} {quarter} {period})"
             for name, delay in zip(names, delays)
         ]
         return lines, names
@@ -188,7 +188,9 @@ class ChargePumpTopology(Topology):
         return m
 
     def emit_netlist(self, params: ChargePumpParams, *, supply_V: float = 5.0, cload_F: float = 10e-12) -> str:
-        return _build_tran_deck(params, supply_V).replace(".control", "* .control").replace(".endc", "* .endc")
+        from openanalog.forge.simulator import circuit_only_netlist
+
+        return circuit_only_netlist(_build_tran_deck(params, supply_V))
 
     def device_list(self, params: ChargePumpParams) -> list[dict[str, Any]]:
         p = params.as_dict()

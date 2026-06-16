@@ -13,6 +13,7 @@ from typing import Any
 from openanalog.forge.spec_envelopes import (
     DATASHEET_PARTS,
     DEV_MODE_SPECS,
+    MULTIPLIER_EXPERIMENTAL_SPEC,
     VREF_PHASE3_SPEC,
 )
 
@@ -102,6 +103,28 @@ PRESETS: list[DesignPreset] = [
         seed=1,
         part="RS431",
         notes="deferred to Phase 3 SKY130 bandgap",
+    ),
+    DesignPreset(
+        id="rs3001_ldo",
+        name="RS3001 LDO Regulator",
+        category="ldo",
+        spec=DEV_MODE_SPECS["ldo"],
+        expect_pass=True,
+        budget=180,
+        seed=23,
+        part="RS3001",
+        notes="3.3V fixed, dropout<300mV, Iq<100µA",
+    ),
+    DesignPreset(
+        id="rs7001_multiplier",
+        name="RS7001 Analog Multiplier (experimental)",
+        category="multiplier",
+        spec=MULTIPLIER_EXPERIMENTAL_SPEC,
+        expect_pass=False,
+        budget=200,
+        seed=31,
+        part="RS7001",
+        notes="Gilbert cell — experimental, not in forge fitness gate yet",
     ),
     # Extra presets for regression growth
     DesignPreset(
