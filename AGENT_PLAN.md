@@ -37,6 +37,23 @@ while the actual circuits fail in ngspice.* Do not reproduce it.
    tolerance in `score_design` (not 30% dev slack). A red STATUS that is true
    beats a green one that lies.
 
+### Session note (read first, every session)
+
+1. Check `docs/STATUS.md`. If Phase 0 item **0.4** (ngspice reachability) isn't
+   marked done, do that first — Phase 1 work is unverifiable without it (you'd be
+   staring at `NOT_SIMULATED` no matter what you change in the bench code).
+2. Once 0.4 is green, go straight to **Phase 1a (comparator)** per this plan.
+   Work one category at a time, in order: comparator → analog_switch →
+   charge_pump → opamp. Do not start Phase 2 or 3 until all four show `working`
+   in `docs/STATUS.md` against `spec_envelopes.py` (not a softened dev profile).
+3. Do not touch Phase 5 / LoRA / training unless explicitly asked. The
+   bitsandbytes import-order fix is already applied — confirm `diag_train.py`
+   ends in `DIAG OK` once, then leave that track alone.
+4. Every task still follows the verify/check/improve loop: run it for real against
+   ngspice, check against the RS-series envelope, update `docs/STATUS.md`
+   honestly, commit as `phaseN: <task>`, and if it fails, say so — never mark
+   working to close a task.
+
 ---
 
 ## Phase 0 — Repo hygiene & CI (do first, ~1 day)
@@ -51,6 +68,62 @@ while the actual circuits fail in ngspice.* Do not reproduce it.
       stay local/WSL for now — note that in the workflow comments.)
 - [ ] Add `docs/STATUS.md` — a living, honest table of every category and its
       real state: `working / partial / broken / not-started`, updated each phase.
+
+### 0.4 — ngspice reachability from the running server (NEW — do before Phase 1)
+
+**Goal:** the server process answers `GET /api/health` with
+`ngspice_available: true`, and a `POST /api/design` call actually produces a
+real measured value (even if it fails the datasheet bar — that's Phase 1's
+problem, not this item's).
+
+**Constraint:** keep the existing split-environment architecture
+(`.venv_wsl` for simulation, `.venv_train` for the web server / GPU work).
+Do not collapse them into one environment — that was a deliberate decision
+from the machine migration, not an accident to undo.
+
+Recommended approach — call into WSL2 from the Windows-hosted server:
+
+- [ ] In the sim-invocation code path (wherever `simulator.py` currently
+      shells out to `ngspice`), detect host OS. On native Windows, invoke
+      ngspice via `wsl.exe` rather than a bare subprocess call:
+      `wsl.exe -d Ubuntu -e ngspice -b <netlist_path>` (or equivalent for however the
+      sim harness currently calls it — same flags, just routed through
+      `wsl.exe`).
+- [ ] Netlist files must be written somewhere both sides can see. Use the
+      `/mnt/c/...` path translation (Windows `C:\Users\user\OpenForge\...`
+      ↔ WSL `/mnt/c/Users/user/OpenForge/...`) rather than copying files
+      back and forth — confirm the project directory is actually mountable
+      from WSL2 (default distro may be docker-desktop with `/mnt/host/c/` —
+      use `OPENFORGE_WSL_DISTRO=Ubuntu` explicitly).
+- [ ] Update `/api/health` to actually attempt a trivial ngspice invocation
+      (not just check a binary exists on PATH) and report the real result.
+- [ ] One round-trip test: hit `/api/design` for any preset, confirm
+      `metrics` in the response has real (non-null) values, even if they
+      fail the spec gate.
+
+**Do not, in this step:** fix any circuit so it passes its datasheet bar —
+that's Phase 1. This item only proves the pipe between Windows and WSL2
+carries a real ngspice run end to end.
+
+**Exit criteria for 0.4:** `/api/health` reports `ngspice_available: true`
+on this host, and one `/api/design` call returns real measured metrics
+(pass or fail, doesn't matter) instead of `null`.
+
+### 0.5 — Netlist/schematic rendering (fix before re-verifying 0.4)
+
+**Symptom:** devices table shows real W/L values, but Netlist tab shows line
+numbers with no SPICE content; Schematic tab shows a single OPAMP block with
+no transistor-level connectivity.
+
+**Fix (2026-06-17):**
+- Frontend: `<pre>` + gutter spans in `openanalog/web/index.html` (table layout
+  collapsed the content column); `resolveNetlist()` backfills from API when needed.
+- Backend: `openanalog/eda/netlist_graph.py` + `render_svg()` prefers device
+  graph over category template symbols.
+
+**Exit criteria for 0.5:** Netlist tab shows readable SPICE deck with line
+numbers; Schematic shows M1…Mn connected by wires for opamp + comparator.
+Run `pytest tests/test_netlist_schematic.py`.
 
 **Exit criteria:** repo pushes clean to GitHub, CI runs tests on push,
 `docs/STATUS.md` reflects reality.
@@ -175,3 +248,19 @@ For each task the agent completes:
 4. **Commit** with `phaseN: <task>`.
 5. If it fails, **say so in the commit/PR notes** and leave the status `broken` —
    never mark it working to close the task.
+
+Master Plan
+
+1. Until green phase 1
+2. do reserch on the repos posted by ceo zero asic
+3. do reserarch on
+then i press opamp descirption all no chagne still cannto no update reuslt thenchange the ui to be more friendly palatnri design aesthetic, cadence deisgn more ppl can use explore redesign, or assisted, then ca instruc tit to like a a  wire or change the configuration thee will parse thinkn otput a resutl with one more wire or change the configuration to current osoruce or source follower then resutl come out say o now it becoem somehting else like charge pump balbal exmaple, then predict drc lvs current hothen nextly OL
+parasitic extraction that do like siemens callibre and cadenc e quantus and cadence 
+
+
+
+Next thingbig is everythign is scattered around different ideas, differnt brain
+Combine every data, u have in ur thought about semicon
+
+we separate combine group to a right place, ur designs all recycle here
+recycle plan.

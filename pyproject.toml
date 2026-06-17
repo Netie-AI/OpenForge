@@ -33,6 +33,7 @@ train = [
     "accelerate>=0.28",
     "bitsandbytes>=0.43",
     "sentencepiece>=0.2",
+    "mlflow>=2.10",
 ]
 web = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.5"]
 all = ["openanalog[ingest,forge,train,web]"]

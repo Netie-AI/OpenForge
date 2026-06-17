@@ -1,5 +1,6 @@
 .venv/
 .venv_wsl/
+.venv_train/
 __pycache__/
 *.py[cod]
 # secrets
@@ -43,6 +44,9 @@ symbench-studio/
 data/seeds/Masala-CHAI/
 data/pdk/
 models/openforge-lora-v1/
+openforge-lora-v1/
+cuda_*.run
+.vscode/
 *.kicad_sch
 data/seeds_normalized.jsonl.bak
 data/seeds_normalized.renorm.jsonl

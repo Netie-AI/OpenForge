@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /mnt/c/Users/oojia/OpenForge
+cd "$(dirname "$0")/.."
 source .venv_wsl/bin/activate
 
 cp openanalog/forge/topologies/comparator.py /tmp/comparator.py.post

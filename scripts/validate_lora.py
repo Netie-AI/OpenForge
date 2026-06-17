@@ -2,12 +2,15 @@
 """Post-training validation — run on Lambda after finetune_lora.py."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 BASE = "Qwen/Qwen2.5-Coder-7B-Instruct"
-LORA = "openforge-lora-v1"
+# Local adapter directory produced by finetune_lora.py (not a HuggingFace Hub repo ID).
+LORA = str(Path(__file__).resolve().parent.parent / "openforge-lora-v1")
 
 SYSTEM = (
     "You are an analog IC design assistant. Given a specification, "

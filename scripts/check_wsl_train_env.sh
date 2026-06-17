@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source /mnt/c/Users/oojia/OpenForge/.venv_wsl/bin/activate
+cd "$(dirname "$0")/.."
+source .venv_wsl/bin/activate
 python - <<'PY'
 import sys
 for pkg in ("torch", "peft", "trl", "bitsandbytes", "transformers"):

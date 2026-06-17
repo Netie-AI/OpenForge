@@ -4,6 +4,7 @@ import os
 import platform
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -45,6 +46,8 @@ MODEL_SET = os.getenv("OPENFORGE_MODEL_SET", "bundled").lower()
 PDK_DIR = DATA_DIR / "pdk" / "sky130"
 
 NGSPICE_TIMEOUT = int(os.getenv("NGSPICE_TIMEOUT", "30"))
+# WSL distro hosting ngspice (default Ubuntu; not docker-desktop).
+OPENFORGE_WSL_DISTRO = os.getenv("OPENFORGE_WSL_DISTRO", "Ubuntu").strip() or "Ubuntu"
 SIM_WORKERS = int(os.getenv("SIM_WORKERS", "4"))
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
@@ -63,13 +66,41 @@ def is_wsl() -> bool:
         return False
 
 
+def _uses_wsl(cmd: list[str]) -> bool:
+    if not cmd:
+        return False
+    return Path(cmd[0]).stem.lower() in ("wsl", "wsl.exe")
+
+
+def win_path_to_wsl(path: Path) -> str:
+    """Convert a Windows absolute path to the Ubuntu WSL mount path (/mnt/c/...)."""
+    s = str(path.resolve()).replace("\\", "/")
+    if len(s) >= 2 and s[1] == ":":
+        drive = s[0].lower()
+        rest = s[2:]
+        if not rest.startswith("/"):
+            rest = "/" + rest
+        return f"/mnt/{drive}{rest}"
+    return s
+
+
 def ngspice_path_arg(sp_path: Path, cmd: list[str]) -> str:
     """Convert a Windows path when invoking ngspice through WSL."""
-    if cmd and cmd[0].lower() == "wsl":
-        s = str(sp_path.resolve()).replace("\\", "/")
-        if len(s) >= 2 and s[1] == ":":
-            return f"/mnt/{s[0].lower()}{s[2:]}"
+    if _uses_wsl(cmd):
+        return win_path_to_wsl(sp_path)
     return str(sp_path)
+
+
+def _wsl_has_ngspice(distro: str) -> bool:
+    try:
+        r = subprocess.run(
+            ["wsl", "-d", distro, "-e", "test", "-x", "/usr/bin/ngspice"],
+            capture_output=True,
+            timeout=10,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def resolve_ngspice_cmd() -> list[str] | None:
@@ -79,7 +110,7 @@ def resolve_ngspice_cmd() -> list[str] | None:
     Master-plan rules:
     - WSL: /usr/bin/ngspice
     - Windows native: C:/msys64/mingw64/bin/ngspice.exe (if installed)
-    - Windows + WSL: wsl /usr/bin/ngspice when MSYS ngspice is absent
+    - Windows + WSL: wsl -d Ubuntu -e /usr/bin/ngspice when MSYS ngspice is absent
     - Linux: `which ngspice`
     - Override: NGSPICE_CMD env (space-separated argv prefix)
     """
@@ -94,16 +125,9 @@ def resolve_ngspice_cmd() -> list[str] | None:
         p = Path("C:/msys64/mingw64/bin/ngspice.exe")
         if p.exists():
             return [str(p)]
-        try:
-            r = subprocess.run(
-                ["wsl", "test", "-x", "/usr/bin/ngspice"],
-                capture_output=True,
-                timeout=5,
-            )
-            if r.returncode == 0:
-                return ["wsl", "/usr/bin/ngspice"]
-        except Exception:
-            pass
+        distro = OPENFORGE_WSL_DISTRO
+        if _wsl_has_ngspice(distro):
+            return ["wsl", "-d", distro, "-e", "/usr/bin/ngspice"]
         return None
     # linux / darwin — only return a path that actually exists
     for p in (Path("/usr/bin/ngspice"), Path("/bin/ngspice")):
@@ -111,6 +135,41 @@ def resolve_ngspice_cmd() -> list[str] | None:
             return [str(p)]
     found = shutil.which("ngspice")
     return [found] if found else None
+
+
+def probe_ngspice(*, timeout: int = 10) -> tuple[bool, str]:
+    """Run a trivial ngspice deck; True only when batch mode completes cleanly."""
+    cmd = resolve_ngspice_cmd()
+    if not cmd:
+        return False, "ngspice not found"
+    deck = "* openforge health probe\nV1 a 0 1\nR1 a 0 1k\n.op\n.end\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".sp", delete=False, prefix="ofprobe_") as tmp:
+        tmp.write(deck)
+        path = Path(tmp.name)
+    try:
+        r = subprocess.run(
+            [*cmd, "-b", ngspice_path_arg(path, cmd)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        text = (r.stdout or "") + (r.stderr or "")
+        fatal = any(
+            kw in text.lower()
+            for kw in ("fatal", "error on line", "simulation interrupted due to error")
+        )
+        if r.returncode == 0 and not fatal:
+            return True, "ok"
+        return False, (text[:300] or f"exit {r.returncode}").strip()
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
+    except FileNotFoundError:
+        return False, "ngspice executable missing"
+    finally:
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def ensure_dirs() -> None:

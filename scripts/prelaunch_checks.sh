@@ -8,6 +8,10 @@ if [ -f .venv_wsl/bin/activate ]; then
   source .venv_wsl/bin/activate
 fi
 
+echo "=== CHECK 0: Train environment ==="
+python scripts/check_train_env.py
+
+echo ""
 echo "=== ENV ==="
 python - <<'PY'
 import sys

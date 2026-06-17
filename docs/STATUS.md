@@ -1,6 +1,39 @@
-# OpenForge category status (updated 2026-06-15)
+# OpenForge category status (updated 2026-06-17)
 
 Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes.py`.
+
+## Phase 0 — Infrastructure (2026-06-17)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| 0.4 ngspice reachability (Windows → WSL) | ✅ | `OPENFORGE_WSL_DISTRO=Ubuntu`; 5× `/api/health` probe OK; opamp+comparator `/api/design` return real metrics. **Server:** port **8090** on this host (8080 blocked by Windows port exclusion — use `scripts/verify_phase04.py 8090`) |
+| 0.5 netlist/schematic rendering | ✅ | **Frontend:** netlist tab line-number table collapsed content column → fixed with `<pre>` + gutter spans. **Backend:** `netlist_graph.py` emits device-level schematic (M1…Mn + wires) instead of OPAMP block symbol |
+| 0.6 schematic layout (floorplan) | ✅ | Role-based floorplans for `two_stage_miller_opamp` + `diff_pair_comparator`: fixed MOSFET symbols, orthogonal routing, VDD/GND rails, junction dots at 3+-way ties. Undefined topologies fall back with logged notice. |
+| Default WSL distro | ⚠️ | docker-desktop is default; ngspice lives in **Ubuntu** — set `OPENFORGE_WSL_DISTRO=Ubuntu` |
+| Phase 5 infra (vLLM / TurboQuant / serving) | ⏸ | Deferred until trained LoRA adapter exists — no install/wiring this session |
+
+### Phase 5 — early / unauthorized smoke test (2026-06-18)
+
+A 3-epoch LoRA training run completed ahead of plan gating and saved an adapter to `openforge-lora-v1/`. **Treat as throwaway smoke-test artifact**, not a milestone — corpus predates Phase 1-4 fitness=1 bar across categories.
+
+- `scripts/validate_lora.py` fixed: loads local `./openforge-lora-v1` path instead of Hub repo ID
+- Do not wire this adapter into serving UI or re-train until Phase 1-4 gates pass
+
+### 0.5 fix summary (2026-06-17)
+
+| Layer | Bug | Fix |
+|-------|-----|-----|
+| **Frontend** | Netlist tab showed line numbers 1–37 with **no SPICE text** — table `.code` column collapsed to zero visible width in the three-pane layout | Replaced table with `<pre id="netlistPre">` + gutter spans; `resolveNetlist()` fetches `/api/last-design` or `/api/netlist` when slim response omits netlist |
+| **Backend** | Schematic tab showed one **OPAMP/CMP block symbol** with no transistor connectivity | Added `openanalog/eda/netlist_graph.py` — parses M/C/R/I from netlist, renders device boxes + wire connections; `render_svg()` prefers netlist graph when ≥2 MOSFETs |
+
+**Verify:** `pytest tests/test_netlist_schematic.py`; `python scripts/verify_phase04.py 8090`
+
+**Reproduce server (Windows, this host):**
+```powershell
+$env:OPENFORGE_WSL_DISTRO='Ubuntu'
+.\.venv_train\Scripts\python.exe -m openanalog serve --host 127.0.0.1 --port 8090
+# → http://127.0.0.1:8090  (8080 blocked — Windows excluded port range)
+```
 
 ## Phase 3 Status (2026-06-15)
 
@@ -14,10 +47,11 @@ Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes
 | multiplier  | ⚠️      | ⚠️      | Gilbert cell experimental (partial)|
 | vref        | ⏸      | ⚠️      | BJT needed; deferred to Phase 3.5  |
 
-## Schematic / Phase 7 (2026-06-16)
-- **Diagnosis (confirmed):** `kicad_sch.py` emits one KiCad library chip symbol + power rails — no `Device:M` / per-transistor symbols. Not an unflattened `.subckt` bug.
-- Topology files do **not** set `kicad_symbol`; `footprints.py` maps category→symbol when `attach_eda_metadata()` runs (comparator→`Comparator:LMV331`, etc.). Missing `eda` falls back to `LM358`.
-- Real fix gated on Phase 6 blocks (device-level schematic from block boundaries).
+## Schematic / Phase 7 (2026-06-16, updated 2026-06-18)
+- **0.6:** Role-based schematic layout — MOSFET symbols with fixed gate/drain/source geometry, orthogonal Manhattan wires, VDD/GND rails, per-topology floorplans (`two_stage_miller_opamp`, `diff_pair_comparator`). KiCad export still uses one library symbol — unchanged.
+- **0.5 (fixed):** Web UI netlist tab + netlist-driven device graph SVG (M1–M8 boxes with node wires). KiCad export still uses one library symbol — unchanged.
+- **Prior diagnosis (still true for KiCad):** `kicad_sch.py` emits one KiCad library chip symbol + power rails — no `Device:M` / per-transistor symbols.
+- Full pretty symbol library / KiCad per-device placement gated on Phase 6 blocks.
 
 ## Phase 6 — compositional blocks (2026-06-16)
 - Comparator decomposed: `forge/blocks/` — `tail_current_source`, `differential_pair`, `current_mirror`, `comparator_output`, `comparator_core`

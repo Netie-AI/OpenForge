@@ -2,6 +2,8 @@
 openanalog/web/app.py
 
 FastAPI web UI — backend-driven chat-to-chip interface.
+
+Stack: FastAPI serves a single vanilla HTML/JS page from index.html (no SPA framework).
 """
 
 from __future__ import annotations
@@ -9,6 +11,7 @@ from __future__ import annotations
 import subprocess
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, Query
@@ -105,6 +108,11 @@ class DesignRequest(BaseModel):
 class VerifyRequest(BaseModel):
     preset_id: str
     model_set: Optional[str] = None
+
+
+class EditRequest(BaseModel):
+    instruction: str
+    current_netlist: str = ""
 
 
 _last_result: dict[str, Any] = {}
@@ -326,442 +334,57 @@ def api_netlist() -> Response:
     )
 
 
+@app.get("/api/health")
+def api_health() -> dict[str, Any]:
+    from openanalog.config import probe_ngspice, resolve_ngspice_cmd
+
+    cmd = resolve_ngspice_cmd()
+    ok, detail = probe_ngspice()
+    return {
+        "status": "ok" if ok else "degraded",
+        "ngspice_available": ok,
+        "ngspice_cmd": cmd,
+        "ngspice_probe": detail,
+        "version": _git_short_hash(),
+    }
+
+
+@app.get("/api/products")
+def api_products() -> dict[str, Any]:
+    return product_line_payload()
+
+
+@app.post("/api/edit")
+def api_edit(req: EditRequest) -> JSONResponse:
+    return JSONResponse(
+        {
+            "applied": False,
+            "status": "not_implemented",
+            "instruction": req.instruction,
+            "netlist": None,
+            "classification": None,
+            "diff": None,
+            "note": "edit engine not wired yet",
+        }
+    )
+
+
+@app.get("/api/drc-lvs")
+def api_drc_lvs() -> dict[str, Any]:
+    return {"status": "not_implemented", "drc": None, "lvs": None}
+
+
+@app.get("/api/last-design")
+def api_last_design() -> JSONResponse:
+    if not _last_result:
+        return JSONResponse({"error": "no design yet"}, status_code=404)
+    return JSONResponse(_slim_result(_last_result))
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     return INDEX_HTML
 
 
-INDEX_HTML = r"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>OpenForge — AI Analog EDA</title>
-<style>
-  :root{--bg:#0b0e14;--panel:#121722;--panel2:#0e131c;--line:#1e2636;--txt:#d6deeb;--dim:#8a97ad;--acc:#5ad1c9;--acc2:#7aa2ff;--ok:#3fd17a;--bad:#ff6b6b;--warn:#ffcc66;--mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
-  *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0a0d13,#0b0e14);color:var(--txt);font-family:Inter,system-ui,sans-serif;font-size:14px}
-  header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:5}
-  .logo{font-weight:800;font-size:18px} .logo span{color:var(--acc)} .tag{color:var(--dim);font-size:12px}
-  .wrap{display:grid;grid-template-columns:400px 1fr 320px;gap:16px;padding:16px;max-width:1900px;margin:0 auto}
-  @media(max-width:1200px){.wrap{grid-template-columns:400px 1fr}}
-  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
-  h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
-  textarea{width:100%;height:220px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical}
-  select,input[type=text]{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
-  .row{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
-  button{background:linear-gradient(180deg,var(--acc),#3bb4ab);color:#04221f;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer}
-  button.ghost{background:transparent;color:var(--acc2);border:1px solid var(--line);font-weight:600}
-  button:disabled{opacity:.5;cursor:not-allowed}
-  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px}
-  .metric{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px}
-  .metric .v{font-size:20px;font-weight:700;font-family:var(--mono)}
-  .metric .l{color:var(--dim);font-size:11px;text-transform:uppercase}
-  .metric.ok{border-color:rgba(63,209,122,.5)} .metric.bad{border-color:rgba(255,107,107,.5)}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line)}
-  th{color:var(--dim);font-size:11px;text-transform:uppercase}
-  .badge{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
-  .badge.ok{background:rgba(63,209,122,.15);color:var(--ok)}
-  .badge.bad{background:rgba(255,107,107,.15);color:var(--bad)}
-  pre{background:#070a0f;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font-family:var(--mono);font-size:12px;max-height:420px}
-  .verdict{font-size:15px;font-weight:800;padding:10px;border-radius:8px;margin-bottom:14px}
-  .verdict.ok{background:rgba(63,209,122,.12);color:var(--ok);border:1px solid rgba(63,209,122,.4)}
-  .verdict.partial{background:rgba(255,204,102,.10);color:var(--warn);border:1px solid rgba(255,204,102,.4)}
-  .muted{color:var(--dim);font-size:12px}
-  .tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
-  .tab{padding:6px 12px;border:1px solid var(--line);border-radius:6px;cursor:pointer;color:var(--dim);font-size:12px}
-  .tab.active{color:var(--txt);border-color:var(--acc);background:var(--panel2)}
-  .hidden{display:none}
-  .sch-wrap{background:#070a0f;border:1px solid var(--line);border-radius:8px;padding:8px;max-height:480px;overflow:auto}
-  .sch-wrap svg{max-width:100%;height:auto}
-  .ptype-grid{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
-  .ptype{font-size:11px;padding:5px 10px;border-radius:16px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);cursor:pointer;user-select:none}
-  .ptype:hover{border-color:var(--acc2);color:var(--txt)}
-  .ptype.active{border-color:var(--acc);color:var(--acc);background:rgba(90,209,201,.08)}
-  .ptype.planned{opacity:.55;border-style:dashed}
-  .ptype .st{font-size:9px;margin-left:4px;opacity:.8}
-  .fam-label{width:100%;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-top:6px}
-  .section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
-  .section h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
-  .ucard{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer}
-  .ucard:hover{border-color:var(--acc2)}
-  .ucard.active{border-color:var(--acc);background:rgba(90,209,201,.06)}
-  .ucard .utitle{font-weight:700;font-size:13px;margin-bottom:4px}
-  .ucard .usum{font-size:12px;color:var(--dim);line-height:1.4}
-  .ucard .utags{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
-  .utag{font-size:10px;padding:2px 6px;border-radius:10px;background:rgba(122,162,255,.12);color:var(--acc2)}
-  .range-row{font-size:12px;padding:4px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
-  .range-row .rk{color:var(--dim);font-family:var(--mono);font-size:11px}
-  .range-note{font-size:11px;color:var(--ok);margin-top:6px}
-</style>
-</head>
-<body>
-<header>
-  <div class="logo">Open<span>Forge</span></div>
-  <div class="tag">chat → spec → ngspice → netlist + schematic</div>
-</header>
-<div class="wrap">
-  <div class="panel">
-    <h3>Input</h3>
-    <div id="ptypeGrid" class="ptype-grid muted">Loading product types…</div>
-    <div class="row hidden" id="catRow">
-      <span class="muted">topology</span>
-      <select id="cat"></select>
-    </div>
-    <div class="row">
-      <span class="muted">preset</span>
-      <select id="preset"><option value="">— custom —</option></select>
-    </div>
-    <div class="row">
-      <span class="muted">model</span>
-      <select id="provider"></select>
-      <select id="modelset"><option value="bundled">bundled</option><option value="sky130">sky130</option></select>
-    </div>
-    <textarea id="inp" placeholder="Natural language, inline spec, or datasheet text…"></textarea>
-    <div class="row">
-      <button class="ghost" id="btnSample">Load sample</button>
-      <button class="ghost" id="btnInline">Inline spec</button>
-      <label class="muted"><input type="checkbox" id="useLlm" checked/> LLM parse</label>
-    </div>
-    <div class="row">
-      <span class="muted">budget</span>
-      <input type="range" id="budget" min="40" max="400" step="20" value="200"/>
-      <span class="mono" id="budgetv">200</span>
-    </div>
-    <div class="row">
-      <button id="btnGo">Design Chip</button>
-      <button class="ghost" id="btnVerify">Test &amp; Verify</button>
-      <span id="status" class="muted"></span>
-    </div>
-  </div>
-  <div class="panel">
-    <h3>Result</h3>
-    <div class="muted" id="placeholder">Run a design or verify a preset.</div>
-    <div id="results" class="hidden">
-      <div id="verdict" class="verdict"></div>
-      <div class="metrics" id="metrics"></div>
-      <div class="tabs">
-        <div class="tab active" data-t="compliance">Compliance</div>
-        <div class="tab" data-t="schematic">Schematic</div>
-        <div class="tab" data-t="devices">Devices</div>
-        <div class="tab" data-t="eda">KiCad</div>
-        <div class="tab" data-t="netlist">Netlist</div>
-        <div class="tab" data-t="testsuite">Test Suite</div>
-      </div>
-      <div id="tab-compliance"></div>
-      <div id="tab-schematic" class="hidden"><div class="sch-wrap" id="sch"></div></div>
-      <div id="tab-devices" class="hidden"></div>
-      <div id="tab-eda" class="hidden"></div>
-      <div id="tab-netlist" class="hidden">
-        <div class="row">
-          <button class="ghost" id="btnCopy">Copy</button>
-          <button class="ghost" id="btnDl">Download .sp</button>
-          <button class="ghost" id="btnKicad">Download .kicad_sch</button>
-        </div>
-        <pre id="netlist"></pre>
-      </div>
-      <div id="tab-testsuite" class="hidden">
-        <div class="row">
-          <button class="ghost" id="btnRunAll">Run All Presets</button>
-          <span id="suiteStatus" class="muted"></span>
-        </div>
-        <div id="suiteTable"></div>
-      </div>
-    </div>
-  </div>
-  <div class="panel" id="sidePanel">
-    <h3>Applications</h3>
-    <div id="useCases" class="muted">Loading…</div>
-    <div class="section">
-      <h4>Achievable ranges (forge corpus)</h4>
-      <div id="achievableRanges" class="muted">Loading…</div>
-    </div>
-  </div>
-</div>
-<footer style="text-align:center;padding:10px;color:var(--dim);font-size:11px;border-top:1px solid var(--line)">
-  <span id="footerVer">OpenForge</span>
-</footer>
-<script>
-const $=s=>document.querySelector(s);
-let META={}, lastNetlist='', lastResult={}, activeProduct='opamp', activeUseCase='';
-const fmt=(v,d=2)=>v==null?'—':(typeof v==='number'?v.toFixed(d):v);
-
-function fmtRange(m){
-  if(!m)return '—';
-  return `${fmt(m.min,3)} – ${fmt(m.max,3)} (med ${fmt(m.median,3)})`;
-}
-
-function renderUseCases(){
-  const cases=META.use_cases||[];
-  if(!cases.length){$('#useCases').textContent='No use cases';return;}
-  $('#useCases').innerHTML=cases.map(u=>{
-    const cls=u.id===activeUseCase?'ucard active':'ucard';
-    const tags=(u.tags||[]).map(t=>`<span class="utag">${t}</span>`).join('');
-    return `<div class="${cls}" data-uc="${u.id}">
-      <div class="utitle">${u.title}</div>
-      <div class="usum">${u.summary}</div>
-      <div class="utags">${tags}</div>
-    </div>`;
-  }).join('');
-  $('#useCases').querySelectorAll('.ucard').forEach(el=>el.onclick=()=>selectUseCase(el.dataset.uc));
-}
-
-function selectUseCase(id){
-  activeUseCase=id;
-  const u=(META.use_cases||[]).find(x=>x.id===id);
-  if(!u)return;
-  renderUseCases();
-  if(u.product_ids&&u.product_ids[0])selectProduct(u.product_ids[0]);
-  if(u.preset_ids&&u.preset_ids[0]){
-    $('#preset').value=u.preset_ids[0];
-    const p=META.presets.find(x=>x.id===u.preset_ids[0]);
-    if(p){$('#cat').value=p.category;$('#inp').value=p.spec;$('#budget').value=p.budget;$('#budgetv').textContent=p.budget;}
-  }
-  renderAchievableRanges(u.highlight_metrics||[]);
-}
-
-function renderAchievableRanges(highlight){
-  const ar=META.achievable_ranges||{};
-  const cats=ar.categories||{};
-  const p=(META.product_line?.products||[]).find(x=>x.id===activeProduct);
-  const topo=p?.topology||$('#cat').value;
-  const cat=cats[topo];
-  if(!cat){
-    $('#achievableRanges').innerHTML=`<div class="muted">${ar.fitness1_count||0} fitness=1 winners · select a designable product</div>`;
-    return;
-  }
-  const hi=new Set(highlight||['iq_uA','iout_mA']);
-  const keys=Object.keys(cat.metrics||{}).sort((a,b)=>{
-    const ah=hi.has(a)?0:1, bh=hi.has(b)?0:1;
-    return ah-bh||a.localeCompare(b);
-  });
-  let html=`<div class="muted">${cat.part||topo} · ${cat.winner_count} winners</div>`;
-  if(cat.envelope)html+=`<div class="muted" style="margin:4px 0">Target: <span class="mono">${cat.envelope}</span></div>`;
-  keys.slice(0,8).forEach(k=>{
-    const m=cat.metrics[k];
-    const L=(META.metric_labels&&META.metric_labels[k])||{label:k,unit:''};
-    const bold=hi.has(k)?'font-weight:700':'';
-    html+=`<div class="range-row"><span class="rk" style="${bold}">${L.label||k}</span><span>${fmtRange(m)} ${L.unit||''}</span></div>`;
-  });
-  if(cat.low_power_note)html+=`<div class="range-note">${cat.low_power_note}</div>`;
-  $('#achievableRanges').innerHTML=html;
-}
-
-function statusTag(st){
-  if(st==='available')return '';
-  if(st==='partial')return '<span class="st">β</span>';
-  return '<span class="st">soon</span>';
-}
-
-function renderProductGrid(){
-  const pl=META.product_line||{};
-  const fams=pl.families||{};
-  let html='';
-  for(const [fam, items] of Object.entries(fams)){
-    html+=`<div class="fam-label">${fam}</div>`;
-    items.forEach(p=>{
-      const cls=['ptype', p.id===activeProduct?'active':'', p.status==='planned'?'planned':''].filter(Boolean).join(' ');
-      html+=`<div class="${cls}" data-id="${p.id}" data-topo="${p.topology||''}" data-st="${p.status}" title="${p.part}">${p.label}${statusTag(p.status)}</div>`;
-    });
-  }
-  const grid=$('#ptypeGrid');
-  grid.innerHTML=html;
-  grid.querySelectorAll('.ptype').forEach(el=>el.onclick=()=>selectProduct(el.dataset.id));
-}
-
-function selectProduct(id){
-  activeProduct=id;
-  const p=(META.product_line?.products||[]).find(x=>x.id===id);
-  if(!p)return;
-  renderProductGrid();
-  if(p.topology)$('#cat').value=p.topology;
-  const planned=p.status==='planned';
-  $('#btnGo').disabled=planned;
-  $('#status').textContent=planned?`${p.label}: simulation backend coming soon`:'';
-  if(p.sample)$('#inp').value=p.sample;
-  renderAchievableRanges();
-}
-
-async function loadMeta(){
-  const r=await fetch('/api/meta'); META=await r.json();
-  $('#cat').innerHTML=META.categories.map(c=>`<option value="${c}">${c}</option>`).join('');
-  renderProductGrid();
-  selectProduct(activeProduct);
-  $('#preset').innerHTML='<option value="">— custom —</option>'+
-    META.presets.map(p=>`<option value="${p.id}">${p.name}${p.expect_pass?' ✓':''}</option>`).join('');
-  $('#provider').innerHTML=META.providers.map(p=>
-    `<option value="${p.id}" ${!p.available?'disabled':''}>${p.label}${p.available?'':' (no key)'}</option>`).join('');
-  if(META.default_model_set) $('#modelset').value=META.default_model_set;
-  if(META.version){
-    $('#footerVer').textContent=`PDK: ${$('#modelset').value} · git ${META.version.git_hash} · ${META.version.build_date}`;
-  }
-  renderSuiteTable(META.presets||[]);
-  renderUseCases();
-  renderAchievableRanges();
-}
-$('#budget').oninput=e=>$('#budgetv').textContent=e.target.value;
-$('#preset').onchange=()=>{
-  const id=$('#preset').value; if(!id)return;
-  const p=META.presets.find(x=>x.id===id);
-  if(p){$('#cat').value=p.category;$('#inp').value=p.spec;$('#budget').value=p.budget;$('#budgetv').textContent=p.budget;}
-};
-$('#btnSample').onclick=async()=>{
-  const t=META.samples&&META.samples[activeProduct];
-  if(t)$('#inp').value=t;
-  else{
-    const cat=$('#cat').value;
-    const s=META.samples&&META.samples[cat]; if(s)$('#inp').value=s;
-  }
-};
-$('#btnInline').onclick=()=>{
-  const t=META.inline_samples&&META.inline_samples[activeProduct];
-  if(t)$('#inp').value=t;
-  else{
-    const cat=$('#cat').value;
-    const s=META.inline_samples&&META.inline_samples[cat]; if(s)$('#inp').value=s;
-  }
-};
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  t.classList.add('active');
-  ['compliance','schematic','devices','eda','netlist','testsuite'].forEach(n=>$('#tab-'+n).classList.add('hidden'));
-  $('#tab-'+t.dataset.t).classList.remove('hidden');
-});
-
-function metricCard(label,val,unit,pass){
-  const cls=pass===true?'ok':pass===false?'bad':'';
-  return `<div class="metric ${cls}"><div class="l">${label}</div><div class="v">${val}<span class="muted" style="font-size:11px"> ${unit||''}</span></div></div>`;
-}
-
-function render(j, svg){
-  $('#placeholder').classList.add('hidden');
-  $('#results').classList.remove('hidden');
-  lastResult=j;
-  const v=$('#verdict');
-  v.className='verdict '+(j.meets_all?'ok':'partial');
-  v.textContent=(j.meets_all?'✓ ALL SPECS MET':'◐ PARTIAL')+` · ${j.category||'?'} · ${j.topology||''} · ${j.supply_V}V · score ${j.score}`;
-  const m=j.metrics||{}, c=j.compliance||{};
-  const labels=META.metric_labels||{};
-  const keys=j.measurable_specs||Object.keys(m).filter(k=>m[k]!=null);
-  $('#metrics').innerHTML=keys.slice(0,6).map(k=>{
-    const L=labels[k]||{label:k,unit:'',decimals:2};
-    return metricCard(L.label,fmt(m[k],L.decimals),L.unit,c[k]?c[k].pass:undefined);
-  }).join('');
-  let rows='<table><tr><th>Spec</th><th>Target</th><th>Measured</th><th>Status</th></tr>';
-  for(const k in c){const x=c[k];
-    const cls=x.pass===null?'':x.pass?'ok':'bad';
-    const lbl=x.pass===null?'N/A':x.pass?'PASS':'FAIL';
-    rows+=`<tr><td>${k}</td><td>${x.target}</td><td>${fmt(x.measured,3)}</td><td><span class="badge ${cls}">${lbl}</span></td></tr>`;}
-  rows+='</table>';
-  $('#tab-compliance').innerHTML=rows;
-  let dv='<table><tr><th>Device</th><th>Role</th><th>W</th><th>L</th><th>Value</th></tr>';
-  (j.devices||[]).forEach(d=>{dv+=`<tr><td>${d.name}</td><td>${d.role||''}</td><td>${d.W_um??''}</td><td>${d.L_um??''}</td><td>${d.value??''}</td></tr>`;});
-  $('#tab-devices').innerHTML=dv;
-  const eda=j.eda||{};
-  $('#tab-eda').innerHTML=`<table>
-    <tr><th>Package</th><td>${j.package||eda.package||'—'}</td></tr>
-    <tr><th>Symbol</th><td>${eda.kicad_symbol||'—'}</td></tr>
-    <tr><th>Footprint</th><td>${eda.kicad_footprint||'—'}</td></tr>
-    <tr><th>Model set</th><td>${j.model_set||'bundled'}</td></tr>
-  </table>`;
-  lastNetlist=j.netlist||'';
-  $('#netlist').textContent=lastNetlist;
-  if(svg) $('#sch').innerHTML=svg;
-  else if(j.schematic_svg) $('#sch').innerHTML=j.schematic_svg;
-}
-
-async function runDesign(){
-  const txt=$('#inp').value.trim();
-  if(!txt){$('#status').textContent='enter text';return;}
-  const isInline=/[<>=]/.test(txt)&&txt.length<200&&!/\n/.test(txt);
-  const body={budget:+$('#budget').value,use_llm:$('#useLlm').checked,category:$('#cat').value,
-    product_id:activeProduct,llm_provider:$('#provider').value,model_set:$('#modelset').value};
-  if(isInline)body.spec=txt; else body.text=txt;
-  $('#btnGo').disabled=true; $('#status').textContent='designing…';
-  try{
-    const r=await fetch('/api/design',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const j=await r.json();
-    if(j.error){$('#status').textContent='error: '+j.error;return;}
-    let svg='';
-    if(j.has_schematic){const sr=await fetch('/api/schematic.svg'); svg=await sr.text();}
-    render(j,svg); $('#status').textContent='done';
-  }catch(e){$('#status').textContent='error: '+e;}
-  $('#btnGo').disabled=false;
-}
-
-async function runVerify(){
-  const id=$('#preset').value;
-  if(!id){$('#status').textContent='select a preset';return;}
-  $('#btnVerify').disabled=true; $('#status').textContent='verifying…';
-  try{
-    const r=await fetch('/api/verify',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({preset_id:id,model_set:$('#modelset').value})});
-    const j=await r.json();
-    if(j.error){$('#status').textContent='error: '+j.error;return;}
-    const v=$('#verdict');
-    v.className='verdict '+(j.passed?'ok':'partial');
-    v.textContent=(j.passed?'✓ PRESET PASS':'✗ PRESET FAIL')+` · ${j.preset_name} · meets_all=${j.meets_all} (expect ${j.expect_pass})`;
-    $('#placeholder').classList.add('hidden'); $('#results').classList.remove('hidden');
-    $('#tab-compliance').innerHTML=`<table><tr><th>Preset</th><td>${j.preset_name}</td></tr>
-      <tr><th>Expected</th><td>${j.expect_pass}</td></tr><tr><th>Measured meets_all</th><td>${j.meets_all}</td></tr>
-      <tr><th>Score</th><td>${j.score}</td></tr></table>`;
-    const sr=await fetch('/api/schematic.svg?preset_id='+encodeURIComponent(id));
-    if(sr.ok)$('#sch').innerHTML=await sr.text();
-    $('#status').textContent=j.passed?'verify pass':'verify fail';
-  }catch(e){$('#status').textContent='error: '+e;}
-  $('#btnVerify').disabled=false;
-}
-
-$('#btnGo').onclick=runDesign;
-$('#btnVerify').onclick=runVerify;
-$('#btnCopy').onclick=()=>navigator.clipboard.writeText(lastNetlist);
-$('#btnDl').onclick=()=>window.open('/api/netlist','_blank');
-$('#btnKicad').onclick=()=>window.open('/api/kicad_sch','_blank');
-
-function renderSuiteTable(presets, results){
-  const byId={};
-  (results||[]).forEach(r=>byId[r.preset_id]=r);
-  let rows='<table><tr><th>Preset</th><th>Category</th><th>Expect</th><th>Result</th><th>Score</th><th>Specs</th></tr>';
-  presets.forEach(p=>{
-    const r=byId[p.id];
-    const pass=r?(r.passed?'ok':'bad'):'';
-    const lbl=r?(r.passed?'PASS':'FAIL'):'—';
-    let specs='';
-    if(r&&r.compliance){
-      specs=Object.entries(r.compliance).map(([k,v])=>{
-        const c=v.pass===true?'ok':v.pass===false?'bad':'';
-        return `<span class="badge ${c}" style="margin:1px">${k}</span>`;
-      }).join(' ');
-    }
-    rows+=`<tr><td>${p.name}</td><td>${p.category}</td><td>${p.expect_pass}</td>
-      <td><span class="badge ${pass}">${lbl}</span></td>
-      <td>${r?fmt(r.score,3):'—'}</td><td>${specs||'—'}</td></tr>`;
-  });
-  rows+='</table>';
-  $('#suiteTable').innerHTML=rows;
-}
-
-let suitePoll=null;
-async function pollSuite(){
-  const r=await fetch('/api/test-presets'); const j=await r.json();
-  $('#suiteStatus').textContent=j.running?'running…':(j.error?'error: '+j.error:'done '+ (j.finished_at||''));
-  if(j.results&&j.results.length) renderSuiteTable(META.presets||[], j.results);
-  if(!j.running){clearInterval(suitePoll);suitePoll=null;$('#btnRunAll').disabled=false;}
-}
-
-$('#btnRunAll').onclick=async()=>{
-  $('#btnRunAll').disabled=true;
-  $('#suiteStatus').textContent='starting…';
-  await fetch('/api/test-presets',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model_set:$('#modelset').value})});
-  if(suitePoll)clearInterval(suitePoll);
-  suitePoll=setInterval(pollSuite,2000);
-  pollSuite();
-};
-
-loadMeta();
-</script>
-</body>
-</html>
-"""
+_WEB_DIR = Path(__file__).parent
+INDEX_HTML = (_WEB_DIR / "index.html").read_text(encoding="utf-8")

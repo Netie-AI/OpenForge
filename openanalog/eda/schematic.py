@@ -6,7 +6,10 @@ Template-based SVG schematic rendering per topology category.
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+from openanalog.eda.netlist_graph import render_netlist_graph_svg
 
 _SVG_HEAD = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">
 <style>
@@ -114,11 +117,18 @@ _RENDERERS = {
 
 
 def render_svg(result: dict[str, Any]) -> str:
-    cat = result.get("category", "opamp")
-    fn = _RENDERERS.get(cat, _opamp_svg)
-    svg = fn(result)
+    netlist = result.get("netlist") or ""
+    graph = render_netlist_graph_svg(netlist, result) if netlist else None
+    if graph:
+        svg = graph
+    else:
+        cat = result.get("category", "opamp")
+        fn = _RENDERERS.get(cat, _opamp_svg)
+        svg = fn(result)
     meets = result.get("meets_all")
     badge = "PASS" if meets else "PARTIAL"
     color = "#3fd17a" if meets else "#ffcc66"
-    svg = svg.replace("</svg>", f'<text x="20" y="260" fill="{color}" font="bold 11px sans-serif">{badge}</text></svg>')
+    m = re.search(r'viewBox="0 0 \d+ (\d+)"', svg)
+    badge_y = max(int(m.group(1)) - 18, 18) if m else 242
+    svg = svg.replace("</svg>", f'<text x="20" y="{badge_y}" fill="{color}" font="bold 11px sans-serif">{badge}</text></svg>')
     return svg

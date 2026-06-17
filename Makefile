@@ -1,7 +1,9 @@
 .PHONY: test lint smoke smoke-wsl install serve serve-wsl
 
 PYTHON ?= python
-WSL ?= wsl -e bash -lc
+WSL_DISTRO ?= Ubuntu
+WSL ?= wsl -d $(WSL_DISTRO) -e bash -lc
+WSL_ROOT := $(shell wsl -d $(WSL_DISTRO) -e wslpath -u "$(CURDIR)")
 HOST ?= 127.0.0.1
 PORT ?= 8080
 
@@ -16,7 +18,7 @@ smoke:
 	$(PYTHON) scripts/smoke_all.py 80
 
 smoke-wsl:
-	$(WSL) "cd /mnt/c/Users/oojia/OpenForge && source .venv_wsl/bin/activate && python scripts/smoke_all.py 80"
+	$(WSL) "cd '$(WSL_ROOT)' && source .venv_wsl/bin/activate && python scripts/smoke_all.py 80"
 
 install:
 	pip install -e ".[web]" pytest
@@ -26,4 +28,4 @@ serve:
 	$(PYTHON) -m openanalog serve --host $(HOST) --port $(PORT)
 
 serve-wsl:
-	$(WSL) "cd /mnt/c/Users/oojia/OpenForge && source .venv_wsl/bin/activate && pip install -e '.[web]' -q && python -m openanalog serve --host $(HOST) --port $(PORT)"
+	$(WSL) "cd '$(WSL_ROOT)' && source .venv_wsl/bin/activate && pip install -e '.[web]' -q && python -m openanalog serve --host $(HOST) --port $(PORT)"
