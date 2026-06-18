@@ -44,8 +44,10 @@ Reproduce: `python scripts/verify_phase1b.py` (WSL, ngspice on PATH).
 | Item | Status | Notes |
 |------|--------|-------|
 | Topology | ✅ | Bootstrapped **2-stage NMOS Dickson** (`dickson_charge_pump`): gate bootstrapped above VDD via Cboot + Dboot per stage. Fixed in **`8297008`** / **`2c90319`**. |
-| Sizing causal story | ✅ | **Defaults already pass** (vout=4.997 V). Sizer tweaks freq 500 kHz→1.9 MHz, w_switch 80→200 µm, cap tuning — marginal vout/ripple improvement. Not a topology rescue. |
-| Prior ~4.1–4.3 V history | ✅ | **Not target slack.** Pre-bootstrap diode/NMOS pump (`6b2d356` era) lost ~Vth per stage → ~4.27 V in `designs.jsonl`. Bootstrapped topology today: **vout≈5.0 V** even at defaults. |
+| **What closed the category** | ✅ | **Bootstrap fix closed it; sizing was confirmatory only.** Default vout=**4.997 V** already passes RS2660; sized vout=**4.999 V** (+0.04%). This round did not close a real vout gap — it verified the gate and tuned ripple/settle marginally. |
+| Target-mode tolerance | ✅ | **`score_design._passes` default `tol=0.05` (5%)** — read from `openanalog/forge/sizer.py` line 36–44. For vout target=5 V: pass band **4.75–5.25 V**. Measured 4.999 V passes at 5%; would also pass old 30% band (3.5–6.5 V), so **this number alone does not prove no tolerance regression** — regression check is the code read above, not the measurement. |
+| Duplicate instance grep | ✅ | seed=19 sized netlist: **13 device instances, zero duplicate names** (`grep` first-token check on emitted netlist, 2026-06-18). Historical duplicate-`C0` suspect: **checked, none found.** |
+| Prior ~4.1–4.3 V history | ✅ | Pre-bootstrap diode/NMOS pump (`6b2d356` era) lost ~Vth per stage → ~4.27 V in `designs.jsonl` (also passed under old 30% tolerance — false pass). Bootstrapped topology today: **vout≈5.0 V** at defaults. |
 | Seed sensitivity (budget=250) | ✅ | **6/6 pass** (seeds 1, 3, 7, 11, 19, 42): vout 4.998–4.999 V, ripple <0.08 mV, settle <0.02 ms. |
 | Bench sanity | ✅ | `.tran` avg vout over last 30% window; ripple pp same window. Product sample: vout=5 V, ripple=30 mV, settle=3 ms — results consistent, ripple/settle well inside bar. |
 | RS2660 bar (`make smoke`) | ✅ | seed=19 budget=250: **vout=4.999 V, ripple=0.017 mV, settle=0.003 ms**, `meets_all=True` |
@@ -53,7 +55,7 @@ Reproduce: `python scripts/verify_phase1b.py` (WSL, ngspice on PATH).
 | Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_charge_pump_meets_rs2660_bar` |
 | CI | ✅ | Run **#13** green on pushed HEAD `4c57f63` ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27771500132)) |
 
-**Category verdict:** `working` (RS2660, bundled models) — robust across seeds; vout closed by bootstrapped topology fix (8297008), not this session.
+**Category verdict:** `working` (RS2660, bundled models) — **bootstrap topology fix (`8297008`/`2c90319`) is what made vout real**; Phase 1c sizing/CI work was verification + confirmatory tuning, not the primary fix.
 
 Reproduce: `python scripts/verify_phase1c.py` (WSL, ngspice on PATH; ~13 min for full seed sweep).
 
