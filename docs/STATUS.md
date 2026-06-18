@@ -33,7 +33,7 @@ Reproduce: `python scripts/verify_phase1a.py` (WSL, ngspice on PATH).
 | RS2105 bar (`make smoke`) | ✅ | seed=11 budget=250: **Ron=13 Ω, BW=167 MHz, ton=0.33 ns, toff=10.2 ns**, `meets_all=True` |
 | Default params (unsized) | ⚠️ | **Ron=97 Ω** — misses `<50 Ω`; ton/toff/BW pass; sizing required for Ron |
 | Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_switch_meets_rs2105_bar` |
-| CI | ⏳ | Confirm green on pushed HEAD in Actions |
+| CI | ✅ | Run **#11** green on pushed HEAD `2390957` ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27748985425)) |
 
 **Category verdict:** `working` (RS2105, bundled models) — robust across seeds; Ron closed by device width sizing after prior S/D orientation fix.
 
