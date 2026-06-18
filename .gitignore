@@ -1,6 +1,7 @@
 .venv/
 .venv_wsl/
 .venv_train/
+.venv_ci/
 __pycache__/
 *.py[cod]
 # secrets

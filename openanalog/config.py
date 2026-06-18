@@ -74,14 +74,14 @@ def _uses_wsl(cmd: list[str]) -> bool:
 
 def win_path_to_wsl(path: Path) -> str:
     """Convert a Windows absolute path to the Ubuntu WSL mount path (/mnt/c/...)."""
-    s = str(path.resolve()).replace("\\", "/")
+    s = str(path).replace("\\", "/")
     if len(s) >= 2 and s[1] == ":":
         drive = s[0].lower()
         rest = s[2:]
         if not rest.startswith("/"):
             rest = "/" + rest
         return f"/mnt/{drive}{rest}"
-    return s
+    return str(path.resolve()).replace("\\", "/")
 
 
 def ngspice_path_arg(sp_path: Path, cmd: list[str]) -> str:
