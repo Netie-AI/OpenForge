@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
 **Updated:** 2026-06-18  
-**HEAD:** see `git log -1` — confirm CI green on pushed HEAD before trusting this doc.
+**HEAD:** `d27ccca` — CI run **#16** green ([Actions](https://github.com/Netie-AI/OpenForge/actions/runs/27774104165)). **Phase 1 THE GATE closed.**
 
 Use this file at the **start of every new Cursor window**. Read it, then `docs/STATUS.md`, then `AGENT_PLAN.md` §0 operating rules.
 

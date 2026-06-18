@@ -72,7 +72,7 @@ Reproduce: `python scripts/verify_phase1c.py` (WSL, ngspice on PATH; ~13 min for
 | RS321 bar (`make smoke`) | ✅ | seed=42 budget=250: **AOL=102 dB, GBP=1.11 MHz, PM=63°, Iq=32 µA, slew=0.56 V/µs**, `meets_all=True` |
 | Default params (unsized) | ❌ | Fails RS321 on AOL, PM, GBP, Iq — sizing required |
 | Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_opamp_meets_rs321_bar` |
-| CI | ⏳ | Confirm green on pushed HEAD in Actions |
+| CI | ✅ | Run **#16** green on pushed HEAD `d27ccca` ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27774104165)) |
 
 **Category verdict:** `working` (RS321, bundled models, seed=42 gate) — sizing-dependent with **AOL seed variance** documented.
 
