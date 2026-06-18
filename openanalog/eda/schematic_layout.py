@@ -12,8 +12,8 @@ from openanalog.eda.symbols import Point, render_symbol, snap, terminal_position
 
 log = logging.getLogger(__name__)
 
-_WIRE = 'stroke="#5ad1c9" stroke-width="1.5"'
-_RAIL = 'stroke="#5ad1c9" stroke-width="2"'
+_WIRE = 'stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"'
+_RAIL = 'stroke="#5ad1c9" stroke-width="2" class="signal-wire"'
 _DOT = 'fill="#5ad1c9"'
 _DIM = 'fill="#8a97ad" font="9px ui-monospace,monospace"'
 
@@ -244,7 +244,7 @@ def _draw_rails(
         body += f'<line x1="{margin}" y1="{vdd_y}" x2="{width - margin}" y2="{vdd_y}" {_RAIL}/>\n'
         body += f'<text x="{margin}" y="{vdd_y - 8}" fill="#5ad1c9" font="bold 11px sans-serif">VDD</text>\n'
         for pt in vdd_pts:
-            stub_x = snap(pt.x)
+            stub_x = pt.x
             body += f'<line x1="{stub_x}" y1="{vdd_y}" x2="{stub_x}" y2="{pt.y}" {_WIRE}/>\n'
 
     gnd_pts = _gnd_points(placed)
@@ -252,7 +252,7 @@ def _draw_rails(
         body += f'<line x1="{margin}" y1="{gnd_y}" x2="{width - margin}" y2="{gnd_y}" {_RAIL}/>\n'
         body += f'<text x="{margin}" y="{gnd_y + 16}" {_DIM}>GND</text>\n'
         for pt in gnd_pts:
-            stub_x = snap(pt.x)
+            stub_x = pt.x
             body += f'<line x1="{stub_x}" y1="{pt.y}" x2="{stub_x}" y2="{gnd_y}" {_WIRE}/>\n'
 
     return body
@@ -274,11 +274,11 @@ def _pin_labels(topology: str) -> str:
     topo = topology.lower()
     if topo in _FLOORPLAN_TOPOLOGIES or "opamp" in topo or "comparator" in topo:
         labels += f'<text x="50" y="238" {_DIM}>IN+</text>\n'
-        labels += f'<line x1="70" y1="234" x2="130" y2="234" {_WIRE}/>\n'
+        labels += f'<line x1="70" y1="234" x2="130" y2="234" {_WIRE} class="io-stub"/>\n'
         labels += f'<text x="350" y="238" {_DIM}>IN-</text>\n'
-        labels += f'<line x1="370" y1="234" x2="330" y2="234" {_WIRE}/>\n'
+        labels += f'<line x1="370" y1="234" x2="330" y2="234" {_WIRE} class="io-stub"/>\n'
         labels += f'<text x="500" y="128" {_DIM}>OUT</text>\n'
-        labels += f'<line x1="480" y1="124" x2="450" y2="124" {_WIRE}/>\n'
+        labels += f'<line x1="480" y1="124" x2="450" y2="124" {_WIRE} class="io-stub"/>\n'
     return labels
 
 

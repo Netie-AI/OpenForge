@@ -1,0 +1,379 @@
+"""Schematic connectivity verification — terminal/wire match and netlist equivalence."""
+
+from __future__ import annotations
+
+import re
+from collections import defaultdict
+from typing import Any
+
+from openanalog.eda.netlist_graph import SpiceDevice
+from openanalog.eda.schematic_layout import (
+    PlacedDevice,
+    _FLOORPLAN_TOPOLOGIES,
+    _gnd_points,
+    _vdd_nodes,
+    build_schematic_layout,
+    render_schematic_svg,
+)
+from openanalog.eda.symbols import Point, terminal_positions
+
+_LINE_RE = re.compile(
+    r'<line x1="(-?\d+)" y1="(-?\d+)" x2="(-?\d+)" y2="(-?\d+)"([^/]*)/>'
+)
+_CIRCLE_RE = re.compile(r'<circle cx="(-?\d+)" cy="(-?\d+)" r="(\d+)"')
+_EPSILON = 0.5
+
+
+def _pt_key(p: Point) -> tuple[int, int]:
+    return (p.x, p.y)
+
+
+def _near(a: Point, b: Point, eps: float = _EPSILON) -> bool:
+    return abs(a.x - b.x) <= eps and abs(a.y - b.y) <= eps
+
+
+def _point_on_segment(x: int, y: int, x1: int, y1: int, x2: int, y2: int) -> bool:
+    if x1 == x2 == x:
+        return min(y1, y2) - _EPSILON <= y <= max(y1, y2) + _EPSILON
+    if y1 == y2 == y:
+        return min(x1, x2) - _EPSILON <= x <= max(x1, x2) + _EPSILON
+    return (abs(x - x1) <= _EPSILON and abs(y - y1) <= _EPSILON) or (
+        abs(x - x2) <= _EPSILON and abs(y - y2) <= _EPSILON
+    )
+
+
+def parse_wire_segments(svg: str) -> list[tuple[int, int, int, int, bool]]:
+    """Return (x1, y1, x2, y2, is_io_stub) for routed schematic wires only."""
+    segments: list[tuple[int, int, int, int, bool]] = []
+    for m in _LINE_RE.finditer(svg):
+        attrs = m.group(5)
+        if 'class="signal-wire"' not in attrs:
+            continue
+        x1, y1, x2, y2 = (int(m.group(i)) for i in range(1, 5))
+        segments.append((x1, y1, x2, y2, 'class="io-stub"' in attrs))
+    return segments
+
+
+def junction_points(svg: str) -> set[tuple[int, int]]:
+    pts: set[tuple[int, int]] = set()
+    for m in _CIRCLE_RE.finditer(svg):
+        if int(m.group(3)) == 3:
+            pts.add((int(m.group(1)), int(m.group(2))))
+    return pts
+
+
+def terminal_map(placed: list[PlacedDevice]) -> dict[tuple[int, int], list[tuple[str, str]]]:
+    mapping: dict[tuple[int, int], list[tuple[str, str]]] = {}
+    for pd in placed:
+        for node, pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).items():
+            key = _pt_key(pt)
+            mapping.setdefault(key, []).append((pd.dev.name.upper(), node.lower()))
+    return mapping
+
+
+def netlist_adjacency(devices: list[SpiceDevice]) -> dict[str, set[tuple[str, str]]]:
+    adj: dict[str, set[tuple[str, str]]] = {}
+    for dev in devices:
+        for node in dev.nodes:
+            adj.setdefault(node.lower(), set()).add((dev.name.upper(), node.lower()))
+    return adj
+
+
+def _wire_adjacency(
+    segments: list[tuple[int, int, int, int, bool]],
+) -> dict[tuple[int, int], set[tuple[int, int]]]:
+    """Grid points connected by Manhattan wire segments."""
+    adj: dict[tuple[int, int], set[tuple[int, int]]] = defaultdict(set)
+
+    def add_edge(a: tuple[int, int], b: tuple[int, int]) -> None:
+        adj[a].add(b)
+        adj[b].add(a)
+
+    for x1, y1, x2, y2, is_io in segments:
+        if is_io:
+            continue
+        if x1 == x2:
+            y0, y1r = sorted((y1, y2))
+            for y in range(y0, y1r):
+                add_edge((x1, y), (x1, y + 1))
+        elif y1 == y2:
+            x0, x1r = sorted((x1, x2))
+            for x in range(x0, x1r):
+                add_edge((x, y1), (x + 1, y1))
+        else:
+            add_edge((x1, y1), (x2, y2))
+    return adj
+
+
+def _connected_component(
+    start: tuple[int, int],
+    wire_adj: dict[tuple[int, int], set[tuple[int, int]]],
+) -> set[tuple[int, int]]:
+    seen = {start}
+    stack = [start]
+    while stack:
+        cur = stack.pop()
+        for nxt in wire_adj.get(cur, ()):
+            if nxt not in seen:
+                seen.add(nxt)
+                stack.append(nxt)
+    return seen
+
+
+def _terminal_on_wire(
+    pt: tuple[int, int],
+    segments: list[tuple[int, int, int, int, bool]],
+) -> bool:
+    x, y = pt
+    for x1, y1, x2, y2, is_io in segments:
+        if is_io:
+            continue
+        if _point_on_segment(x, y, x1, y1, x2, y2):
+            return True
+    return False
+
+
+def _rail_endpoints(
+    placed: list[PlacedDevice],
+    nets: dict[str, list[Point]],
+    width: int,
+    height: int,
+) -> set[tuple[int, int]]:
+    margin = 40
+    vdd_y = round(50 / 10) * 10
+    gnd_y = round((height - 40) / 10) * 10
+    pts: set[tuple[int, int]] = set()
+    for x in range(margin, width - margin + 1, 10):
+        pts.add((x, vdd_y))
+        pts.add((x, gnd_y))
+    for pt in _vdd_nodes(nets):
+        stub_x = pt.x
+        for y in range(min(vdd_y, pt.y), max(vdd_y, pt.y) + 1):
+            pts.add((stub_x, y))
+        pts.add(_pt_key(pt))
+
+    for pt in _gnd_points(placed):
+        stub_x = pt.x
+        for y in range(min(pt.y, gnd_y), max(pt.y, gnd_y) + 1):
+            pts.add((stub_x, y))
+        pts.add(_pt_key(pt))
+    return pts
+
+
+def _allowed_dangling_points(
+    placed: list[PlacedDevice],
+    nets: dict[str, list[Point]],
+    width: int,
+    height: int,
+    svg: str,
+) -> set[tuple[int, int]]:
+    allowed: set[tuple[int, int]] = set()
+    for pd in placed:
+        for pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).values():
+            allowed.add(_pt_key(pt))
+    allowed |= junction_points(svg)
+    allowed |= _rail_endpoints(placed, nets, width, height)
+    return allowed
+
+
+def _collect_net_points(placed: list[PlacedDevice]) -> dict[str, list[Point]]:
+    nets: dict[str, list[Point]] = {}
+    for pd in placed:
+        for node, pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).items():
+            if node == "0":
+                continue
+            nets.setdefault(node.lower(), []).append(pt)
+    return nets
+
+
+def schematic_adjacency_from_wires(
+    placed: list[PlacedDevice],
+    segments: list[tuple[int, int, int, int, bool]],
+) -> dict[str, set[tuple[str, str]]]:
+    """Map netlist node names to pins connected by the wire graph."""
+    tmap = terminal_map(placed)
+    wire_adj = _wire_adjacency(segments)
+    adj: dict[str, set[tuple[str, str]]] = {}
+
+    visited: set[tuple[int, int]] = set()
+    for pt, pins in tmap.items():
+        if pt in visited:
+            continue
+        component = _connected_component(pt, wire_adj)
+        visited |= component
+        nets_in_comp: set[str] = set()
+        pins_in_comp: set[tuple[str, str]] = set()
+        for cpt in component:
+            for pin in tmap.get(cpt, ()):
+                nets_in_comp.add(pin[1])
+                pins_in_comp.add(pin)
+        if len(nets_in_comp) == 1:
+            net = next(iter(nets_in_comp))
+            adj.setdefault(net, set()).update(pins_in_comp)
+        else:
+            for pin in pins_in_comp:
+                adj.setdefault(pin[1], set()).add(pin)
+    return adj
+
+
+def _segments_cross(
+    a: tuple[int, int, int, int, bool],
+    b: tuple[int, int, int, int, bool],
+) -> tuple[int, int] | None:
+    ax1, ay1, ax2, ay2, aio = a
+    bx1, by1, bx2, by2, bio = b
+    if aio or bio:
+        return None
+    shared = {(ax1, ay1), (ax2, ay2)} & {(bx1, by1), (bx2, by2)}
+    if shared:
+        return None
+    if ax1 == ax2 and by1 == by2:
+        x, y = ax1, by1
+        ay_lo, ay_hi = sorted((ay1, ay2))
+        bx_lo, bx_hi = sorted((bx1, bx2))
+        if bx_lo < x < bx_hi and ay_lo < y < ay_hi:
+            return (x, y)
+    if ay1 == ay2 and bx1 == bx2:
+        x, y = bx1, ay1
+        ax_lo, ax_hi = sorted((ax1, ax2))
+        by_lo, by_hi = sorted((by1, by2))
+        if ax_lo < x < ax_hi and by_lo < y < by_hi:
+            return (x, y)
+    return None
+
+
+def _segment_nets(
+    seg: tuple[int, int, int, int, bool],
+    tmap: dict[tuple[int, int], list[tuple[str, str]]],
+) -> set[str]:
+    x1, y1, x2, y2, _ = seg
+    nets: set[str] = set()
+    for (tx, ty), pins in tmap.items():
+        if _point_on_segment(tx, ty, x1, y1, x2, y2):
+            for _, node in pins:
+                nets.add(node)
+    return nets
+
+
+def _false_junction_at_crossings(
+    segments: list[tuple[int, int, int, int, bool]],
+    tmap: dict[tuple[int, int], list[tuple[str, str]]],
+    junctions: set[tuple[int, int]],
+) -> list[str]:
+    """Junction dots must not sit on crossings of unrelated nets."""
+    errors: list[str] = []
+    signal = [s for s in segments if not s[4]]
+    for i, a in enumerate(signal):
+        nets_a = _segment_nets(a, tmap)
+        for b in signal[i + 1 :]:
+            cross = _segments_cross(a, b)
+            if cross is None:
+                continue
+            nets_b = _segment_nets(b, tmap)
+            if not nets_a or not nets_b or not nets_a.isdisjoint(nets_b):
+                continue
+            if cross in junctions:
+                errors.append(
+                    f"junction dot at ({cross[0]}, {cross[1]}) connects unrelated nets "
+                    f"{sorted(nets_a)} vs {sorted(nets_b)}"
+                )
+    return errors
+
+
+def verify_schematic_connectivity(
+    devices: list[SpiceDevice],
+    result: dict[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    svg = render_schematic_svg(devices, result)
+    layout = build_schematic_layout(devices, result)
+    placed = layout.placed
+    nets = _collect_net_points(placed)
+    segments = parse_wire_segments(svg)
+    tmap = terminal_map(placed)
+    junctions = junction_points(svg)
+    allowed = _allowed_dangling_points(placed, nets, layout.width, layout.height, svg)
+
+    for pt, pins in tmap.items():
+        if any(n == "0" for _, n in pins):
+            if pt in allowed or any(_near(Point(*pt), Point(*a)) for a in allowed):
+                continue
+        if any(n.lower() in ("vdd", "vdd3") for _, n in pins):
+            if _terminal_on_wire(pt, segments) or pt in allowed:
+                continue
+        if any(n.lower().startswith("vin") for _, n in pins):
+            continue
+        if not _terminal_on_wire(pt, segments):
+            devs = ", ".join(f"{d}.{n}" for d, n in pins)
+            errors.append(f"terminal ({pt[0]}, {pt[1]}) ({devs}) not on any wire")
+
+    endpoint_degree: dict[tuple[int, int], int] = defaultdict(int)
+    for x1, y1, x2, y2, is_io in segments:
+        if is_io:
+            continue
+        endpoint_degree[(x1, y1)] += 1
+        endpoint_degree[(x2, y2)] += 1
+
+    for x1, y1, x2, y2, is_io in segments:
+        if is_io:
+            continue
+        for x, y in ((x1, y1), (x2, y2)):
+            if endpoint_degree[(x, y)] >= 2:
+                continue
+            if (x, y) in allowed:
+                continue
+            if any(_near(Point(x, y), Point(*a)) for a in allowed):
+                continue
+            errors.append(f"dangling wire endpoint ({x}, {y})")
+
+    placed_names = {pd.dev.name.upper() for pd in placed}
+    nl_adj = {
+        net: {p for p in pins if p[0] in placed_names}
+        for net, pins in netlist_adjacency(devices).items()
+    }
+    sch_adj = schematic_adjacency_from_wires(placed, segments)
+    for net, pins in nl_adj.items():
+        if net == "0" or not pins:
+            continue
+        missing = pins - sch_adj.get(net, set())
+        if missing:
+            errors.append(f"net {net}: missing pins in wire graph: {sorted(missing)}")
+    for net, pins in sch_adj.items():
+        if net == "0" or not pins:
+            continue
+        extra = pins - nl_adj.get(net, set())
+        if extra:
+            errors.append(f"net {net}: extra pins in wire graph: {sorted(extra)}")
+
+    errors.extend(_false_junction_at_crossings(segments, tmap, junctions))
+
+    return errors
+
+
+def anchor_wire_diffs(
+    devices: list[SpiceDevice],
+    result: dict[str, Any],
+) -> list[str]:
+    """Report non-rail terminals not lying on a routed wire segment."""
+    svg = render_schematic_svg(devices, result)
+    layout = build_schematic_layout(devices, result)
+    segments = parse_wire_segments(svg)
+    nets = _collect_net_points(layout.placed)
+    rail_pts = _rail_endpoints(layout.placed, nets, layout.width, layout.height)
+    diffs: list[str] = []
+    for pd in layout.placed:
+        for node, pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).items():
+            key = _pt_key(pt)
+            if node == "0":
+                if key in rail_pts or any(_near(pt, Point(*r)) for r in rail_pts):
+                    continue
+            if node.lower() in ("vdd", "vdd3"):
+                if _terminal_on_wire(key, segments) or key in rail_pts:
+                    continue
+            if node.lower().startswith("vin") or node.lower() in ("inp", "inn"):
+                # Input gates may terminate at io-stub lines only.
+                continue
+            if _terminal_on_wire(key, segments):
+                continue
+            diffs.append(f"{pd.dev.name}.{node} anchor ({pt.x}, {pt.y}) not on wire")
+    return diffs
