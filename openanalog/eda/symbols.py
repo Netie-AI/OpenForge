@@ -33,11 +33,12 @@ class SymbolDef:
     svg_body: str
 
     def anchor(self, name: str, origin: Point, *, mirror: bool = False) -> Point:
+        """Return global terminal coords matching render_symbol's SVG transform."""
         pt = self.anchors[name]
         if mirror:
-            mx = origin.x + self.width - pt.x
-            return Point(snap(mx), snap(origin.y + pt.y))
-        return Point(snap(origin.x + pt.x), snap(origin.y + pt.y))
+            # translate(origin.x + width, origin.y) scale(-1, 1)
+            return Point(origin.x + self.width - pt.x, origin.y + pt.y)
+        return Point(origin.x + pt.x, origin.y + pt.y)
 
 
 # NMOS: gate left, drain top-right, source bottom-right; bulk arrow into channel.
