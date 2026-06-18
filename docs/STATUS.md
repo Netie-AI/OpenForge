@@ -21,6 +21,24 @@ Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes
 
 Reproduce: `python scripts/verify_phase1a.py` (WSL, ngspice on PATH).
 
+## Phase 1b — Analog Switch / RS2105 (2026-06-18)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Netlist structure | ✅ | `cmos_transmission_gate`: NMOS+PMOS pass pair + ctrl inverter. Default vs sized: **same 8-element graph**, only W/L change. |
+| Sizing causal story (Ron) | ✅ | **Wn 50→220 µm (4.4×), Wp 100→776 µm (7.8×)** at Vctrl=VDD, Vsig=2.5 V. Ron **97 Ω→13 Ω** (seed=11). ton/toff already pass at defaults (1.4 ns / 8.4 ns); sizing mainly closes Ron margin. |
+| Prior ~834 Ω / ton unmeasured history | ✅ | **Not a sizing miss.** Pre-`175da53` PMOS/NMOS **source/drain swap** in `_core()` produced ~835 Ω Ron and broken tran. Same historical params today: **Ron≈23 Ω**. Fixed in commit **`175da53`**. |
+| Seed sensitivity (budget=250) | ✅ | **5/5 pass** (seeds 1, 3, 7, 11, 12): Ron 2–17 Ω, BW 155–231 MHz, ton 0.3–0.6 ns, toff 10–12 ns. |
+| Bench sanity | ✅ | DC Ron at mid-rail with 1 kΩ//10 pF load; ton/toff from ctrl 0→5 V pulse (100 ps edges). Product sample typ Ron=25 Ω, ton=12 ns, toff=10 ns — sized results consistent with bar, not optimistic stubs. |
+| RS2105 bar (`make smoke`) | ✅ | seed=11 budget=250: **Ron=13 Ω, BW=167 MHz, ton=0.33 ns, toff=10.2 ns**, `meets_all=True` |
+| Default params (unsized) | ⚠️ | **Ron=97 Ω** — misses `<50 Ω`; ton/toff/BW pass; sizing required for Ron |
+| Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_switch_meets_rs2105_bar` |
+| CI | ⏳ | Confirm green on pushed HEAD in Actions |
+
+**Category verdict:** `working` (RS2105, bundled models) — robust across seeds; Ron closed by device width sizing after prior S/D orientation fix.
+
+Reproduce: `python scripts/verify_phase1b.py` (WSL, ngspice on PATH).
+
 ## Phase 0 — Infrastructure (2026-06-17)
 
 | Item | Status | Notes |

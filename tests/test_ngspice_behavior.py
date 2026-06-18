@@ -17,8 +17,9 @@ pytestmark = pytest.mark.skipif(
 
 # DEV_MODE_SPECS values are the RS-series datasheet envelopes (see spec_envelopes.py).
 RS8901_SPEC = DEV_MODE_SPECS["comparator"]
+RS2105_SPEC = DEV_MODE_SPECS["switch"]
 
-SIZE_BUDGET = {"comparator": 250, "opamp": 200, "switch": 150, "charge_pump": 120}
+SIZE_BUDGET = {"comparator": 250, "opamp": 200, "switch": 250, "charge_pump": 120}
 SIZE_SEED = {"comparator": 7, "opamp": 42, "switch": 11, "charge_pump": 19}
 
 
@@ -59,13 +60,27 @@ def test_opamp_meets_datasheet_bar():
     }
 
 
-def test_switch_ron_blocked_on_level1():
-    """Documented level-1 floor ~300Ω at 2.5V common-mode (PMOS pass device dead)."""
-    result = _design("switch")
-    if result["meets_all"]:
-        return
-    ron = result["metrics"].get("ron_ohm")
-    assert ron is not None and ron > 50
+def test_switch_meets_rs2105_bar():
+    """Phase 1b gate: real ngspice sizing must hit RS2105 ron/bw/ton/toff on cmos_transmission_gate."""
+    assert DATASHEET_PARTS["switch"] == "RS2105"
+    result = design(
+        inline_spec=RS2105_SPEC,
+        budget=SIZE_BUDGET["switch"],
+        seed=SIZE_SEED["switch"],
+        record_kg=False,
+    )
+    assert result["topology"] == "cmos_transmission_gate"
+    metrics = result["metrics"]
+    assert metrics.get("ron_ohm") is not None, "ron must come from ngspice OP (not scoring stub)"
+    assert metrics.get("ton_ns") is not None, "ton must come from ngspice .tran"
+    assert metrics.get("toff_ns") is not None, "toff must come from ngspice .tran"
+    assert metrics["ron_ohm"] < 50.0
+    assert metrics["bw_MHz"] > 10.0
+    assert metrics["ton_ns"] < 20.0
+    assert metrics["toff_ns"] < 20.0
+    assert result["meets_all"], {
+        k: v for k, v in result["compliance"].items() if v.get("pass") is False
+    }
 
 
 def test_charge_pump_meets_datasheet_bar():
