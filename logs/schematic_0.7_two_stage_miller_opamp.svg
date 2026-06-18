@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 550" width="580" height="550">
+<style>
+  .wire{stroke="#5ad1c9" stroke-width="1.5" class="signal-wire";fill:none}
+</style>
+<text x="20" y="22" fill="#5ad1c9" font="bold 13px sans-serif">two_stage_miller_opamp · schematic</text>
+<g transform="translate(320, 400)">
+<circle cx="20" cy="20" r="14" fill="none" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="20" y1="10" x2="20" y2="30" stroke="#5ad1c9" stroke-width="1.5"/>
+<polygon points="20,10 16,18 24,18" fill="#5ad1c9"/>
+</g>
+<text x="328" y="452" fill="#d6deeb" font="10px ui-monospace,monospace">Iref</text>
+<g transform="translate(160, 400)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="172" y="460" fill="#d6deeb" font="10px ui-monospace,monospace">M8</text>
+<g transform="translate(240, 320)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="252" y="380" fill="#d6deeb" font="10px ui-monospace,monospace">M5</text>
+<g transform="translate(460, 200)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="472" y="260" fill="#d6deeb" font="10px ui-monospace,monospace">M7</text>
+<g transform="translate(140, 230)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="152" y="290" fill="#d6deeb" font="10px ui-monospace,monospace">M1</text>
+<g transform="translate(376, 230) scale(-1, 1)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="352" y="290" fill="#d6deeb" font="10px ui-monospace,monospace">M2</text>
+<g transform="translate(140, 120)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,10 28,7 28,13" fill="#7aa2ff"/>
+</g>
+<text x="152" y="180" fill="#d6deeb" font="10px ui-monospace,monospace">M3</text>
+<g transform="translate(376, 120) scale(-1, 1)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,10 28,7 28,13" fill="#7aa2ff"/>
+</g>
+<text x="352" y="180" fill="#d6deeb" font="10px ui-monospace,monospace">M4</text>
+<g transform="translate(460, 120)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,10 28,7 28,13" fill="#7aa2ff"/>
+</g>
+<text x="472" y="180" fill="#d6deeb" font="10px ui-monospace,monospace">M6</text>
+<g transform="translate(400, 180)">
+<line x1="4" y1="20" x2="14" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="18" y1="14" x2="18" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="22" y1="14" x2="22" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="414" y="232" fill="#d6deeb" font="10px ui-monospace,monospace">Cc</text>
+<line x1="340" y1="434" x2="300" y2="434" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="300" y1="434" x2="300" y2="360" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="166" y1="424" x2="300" y2="424" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="300" y1="424" x2="300" y2="360" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="246" y1="344" x2="300" y2="344" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="300" y1="344" x2="300" y2="360" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="466" y1="224" x2="300" y2="224" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="300" y1="224" x2="300" y2="360" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="272" y1="330" x2="260" y2="330" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="260" y1="330" x2="260" y2="290" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="172" y1="268" x2="260" y2="268" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="260" y1="268" x2="260" y2="290" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="344" y1="268" x2="260" y2="268" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="260" y1="268" x2="260" y2="290" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="492" y1="210" x2="460" y2="210" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="460" y1="210" x2="460" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="492" y1="130" x2="460" y2="130" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="460" y1="130" x2="460" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="404" y1="200" x2="460" y2="200" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="460" y1="200" x2="460" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="172" y1="240" x2="230" y2="240" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="230" y1="240" x2="230" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="146" y1="144" x2="230" y2="144" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="230" y1="144" x2="230" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="370" y1="144" x2="230" y2="144" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="230" y1="144" x2="230" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="344" y1="240" x2="400" y2="240" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="400" y1="240" x2="400" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="344" y1="130" x2="400" y2="130" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="400" y1="130" x2="400" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="466" y1="144" x2="400" y2="144" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="400" y1="144" x2="400" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="436" y1="200" x2="400" y2="200" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="400" y1="200" x2="400" y2="180" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="40" y1="50" x2="540" y2="50" stroke="#5ad1c9" stroke-width="2" class="signal-wire"/>
+<text x="40" y="42" fill="#5ad1c9" font="bold 11px sans-serif">VDD</text>
+<line x1="340" y1="50" x2="340" y2="406" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="172" y1="50" x2="172" y2="158" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="344" y1="50" x2="344" y2="158" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="492" y1="50" x2="492" y2="158" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="40" y1="510" x2="540" y2="510" stroke="#5ad1c9" stroke-width="2" class="signal-wire"/>
+<text x="40" y="526" fill="#8a97ad" font="9px ui-monospace,monospace">GND</text>
+<line x1="192" y1="438" x2="192" y2="510" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="272" y1="358" x2="272" y2="510" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<line x1="492" y1="238" x2="492" y2="510" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"/>
+<text x="50" y="238" fill="#8a97ad" font="9px ui-monospace,monospace">IN+</text>
+<line x1="70" y1="234" x2="130" y2="234" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire" class="io-stub"/>
+<text x="350" y="238" fill="#8a97ad" font="9px ui-monospace,monospace">IN-</text>
+<line x1="370" y1="234" x2="330" y2="234" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire" class="io-stub"/>
+<text x="500" y="128" fill="#8a97ad" font="9px ui-monospace,monospace">OUT</text>
+<line x1="480" y1="124" x2="450" y2="124" stroke="#5ad1c9" stroke-width="1.5" class="signal-wire" class="io-stub"/>
+<circle cx="300" cy="360" r="3" fill="#5ad1c9"/>
+<circle cx="230" cy="180" r="3" fill="#5ad1c9"/>
+<circle cx="260" cy="290" r="3" fill="#5ad1c9"/>
+<circle cx="400" cy="180" r="3" fill="#5ad1c9"/>
+<circle cx="460" cy="180" r="3" fill="#5ad1c9"/>
+</svg>

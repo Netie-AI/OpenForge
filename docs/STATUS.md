@@ -8,7 +8,8 @@ Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes
 |------|--------|-------|
 | 0.4 ngspice reachability (Windows → WSL) | ✅ | `OPENFORGE_WSL_DISTRO=Ubuntu`; 5× `/api/health` probe OK; opamp+comparator `/api/design` return real metrics. **Server:** port **8090** on this host (8080 blocked by Windows port exclusion — use `scripts/verify_phase04.py 8090`) |
 | 0.5 netlist/schematic rendering | ✅ | **Frontend:** netlist tab line-number table collapsed content column → fixed with `<pre>` + gutter spans. **Backend:** `netlist_graph.py` emits device-level schematic (M1…Mn + wires) instead of OPAMP block symbol |
-| 0.6 schematic layout (floorplan) | ✅ | Role-based floorplans for `two_stage_miller_opamp` + `diff_pair_comparator`: fixed MOSFET symbols, orthogonal routing, VDD/GND rails, junction dots at 3+-way ties. Undefined topologies fall back with logged notice. |
+| 0.6 schematic layout (floorplan) | ✅ | Role-based floorplans for `two_stage_miller_opamp` + `diff_pair_comparator`: fixed MOSFET symbols, orthogonal routing, VDD/GND rails, junction dots at 3+-way ties. **Note:** mirrored-device wire endpoints were misaligned at 0.6 ship (grid snap after mirror transform); fixed in 0.7. |
+| 0.7 schematic connectivity verification | ✅ | `openanalog/eda/schematic_connectivity.py` + `tests/test_schematic_connectivity.py`: terminal-to-wire match (anchors from `symbols.py`), netlist-to-schematic adjacency on placed devices, no dangling routed endpoints, no false junction dots on unrelated-net crossings. Sample SVGs in `logs/schematic_0.7_*.svg`. |
 | Default WSL distro | ⚠️ | docker-desktop is default; ngspice lives in **Ubuntu** — set `OPENFORGE_WSL_DISTRO=Ubuntu` |
 | Phase 5 infra (vLLM / TurboQuant / serving) | ⏸ | Deferred until trained LoRA adapter exists — no install/wiring this session |
 
@@ -48,7 +49,8 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 | vref        | ⏸      | ⚠️      | BJT needed; deferred to Phase 3.5  |
 
 ## Schematic / Phase 7 (2026-06-16, updated 2026-06-18)
-- **0.6:** Role-based schematic layout — MOSFET symbols with fixed gate/drain/source geometry, orthogonal Manhattan wires, VDD/GND rails, per-topology floorplans (`two_stage_miller_opamp`, `diff_pair_comparator`). KiCad export still uses one library symbol — unchanged.
+- **0.7:** Automated schematic connectivity checks — terminal anchors from `symbols.py` must match routed wires; netlist adjacency must match wire graph for placed devices; CI via `tests/test_schematic_connectivity.py`. Fixed mirrored-terminal routing (removed post-mirror grid snap that pulled M2 source off `(344,268)`).
+- **0.6:** Role-based schematic layout — MOSFET symbols with fixed gate/drain/source geometry, orthogonal Manhattan wires, VDD/GND rails, per-topology floorplans (`two_stage_miller_opamp`, `diff_pair_comparator`). Shipped with mirrored wire offset bug (see 0.7). KiCad export still uses one library symbol — unchanged.
 - **0.5 (fixed):** Web UI netlist tab + netlist-driven device graph SVG (M1–M8 boxes with node wires). KiCad export still uses one library symbol — unchanged.
 - **Prior diagnosis (still true for KiCad):** `kicad_sch.py` emits one KiCad library chip symbol + power rails — no `Device:M` / per-transistor symbols.
 - Full pretty symbol library / KiCad per-device placement gated on Phase 6 blocks.
