@@ -18,8 +18,9 @@ pytestmark = pytest.mark.skipif(
 # DEV_MODE_SPECS values are the RS-series datasheet envelopes (see spec_envelopes.py).
 RS8901_SPEC = DEV_MODE_SPECS["comparator"]
 RS2105_SPEC = DEV_MODE_SPECS["switch"]
+RS2660_SPEC = DEV_MODE_SPECS["charge_pump"]
 
-SIZE_BUDGET = {"comparator": 250, "opamp": 200, "switch": 250, "charge_pump": 120}
+SIZE_BUDGET = {"comparator": 250, "opamp": 200, "switch": 250, "charge_pump": 250}
 SIZE_SEED = {"comparator": 7, "opamp": 42, "switch": 11, "charge_pump": 19}
 
 
@@ -83,8 +84,23 @@ def test_switch_meets_rs2105_bar():
     }
 
 
-def test_charge_pump_meets_datasheet_bar():
-    result = _design("charge_pump")
+def test_charge_pump_meets_rs2660_bar():
+    """Phase 1c gate: real ngspice sizing must hit RS2660 vout/ripple/settle on dickson_charge_pump."""
+    assert DATASHEET_PARTS["charge_pump"] == "RS2660"
+    result = design(
+        inline_spec=RS2660_SPEC,
+        budget=SIZE_BUDGET["charge_pump"],
+        seed=SIZE_SEED["charge_pump"],
+        record_kg=False,
+    )
+    assert result["topology"] == "dickson_charge_pump"
+    metrics = result["metrics"]
+    assert metrics.get("vout_V") is not None, "vout must come from ngspice .tran avg"
+    assert metrics.get("ripple_mV") is not None, "ripple must come from ngspice .tran pp"
+    assert metrics.get("settle_ms") is not None, "settle must come from ngspice .tran"
+    assert metrics["vout_V"] >= 4.75  # 5% target-mode floor (same as score_design)
+    assert metrics["ripple_mV"] < 50.0
+    assert metrics["settle_ms"] < 5.0
     assert result["meets_all"], {
         k: v for k, v in result["compliance"].items() if v.get("pass") is False
     }

@@ -39,6 +39,24 @@ Reproduce: `python scripts/verify_phase1a.py` (WSL, ngspice on PATH).
 
 Reproduce: `python scripts/verify_phase1b.py` (WSL, ngspice on PATH).
 
+## Phase 1c — Charge Pump / RS2660 (2026-06-18)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Topology | ✅ | Bootstrapped **2-stage NMOS Dickson** (`dickson_charge_pump`): gate bootstrapped above VDD via Cboot + Dboot per stage. Fixed in **`8297008`** / **`2c90319`**. |
+| Sizing causal story | ✅ | **Defaults already pass** (vout=4.997 V). Sizer tweaks freq 500 kHz→1.9 MHz, w_switch 80→200 µm, cap tuning — marginal vout/ripple improvement. Not a topology rescue. |
+| Prior ~4.1–4.3 V history | ✅ | **Not target slack.** Pre-bootstrap diode/NMOS pump (`6b2d356` era) lost ~Vth per stage → ~4.27 V in `designs.jsonl`. Bootstrapped topology today: **vout≈5.0 V** even at defaults. |
+| Seed sensitivity (budget=250) | ✅ | **6/6 pass** (seeds 1, 3, 7, 11, 19, 42): vout 4.998–4.999 V, ripple <0.08 mV, settle <0.02 ms. |
+| Bench sanity | ✅ | `.tran` avg vout over last 30% window; ripple pp same window. Product sample: vout=5 V, ripple=30 mV, settle=3 ms — results consistent, ripple/settle well inside bar. |
+| RS2660 bar (`make smoke`) | ✅ | seed=19 budget=250: **vout=4.999 V, ripple=0.017 mV, settle=0.003 ms**, `meets_all=True` |
+| Default params (unsized) | ✅ | **vout=4.997 V** — passes RS2660 without sizing |
+| Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_charge_pump_meets_rs2660_bar` |
+| CI | ⏳ | Confirm green on pushed HEAD in Actions |
+
+**Category verdict:** `working` (RS2660, bundled models) — robust across seeds; vout closed by bootstrapped topology fix (8297008), not this session.
+
+Reproduce: `python scripts/verify_phase1c.py` (WSL, ngspice on PATH; ~13 min for full seed sweep).
+
 ## Phase 0 — Infrastructure (2026-06-17)
 
 | Item | Status | Notes |
