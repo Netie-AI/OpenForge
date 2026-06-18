@@ -15,7 +15,7 @@ Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes
 | RS8901 bar (`make smoke`) | ✅ | seed=7 budget=250: **tp=0.19 µs, vos=0.30 mV, iq=0.62 µA**, `meets_all=True` |
 | Default params (unsized) | ⚠️ | **tp=0.21 µs, iq=1.58 µA** — tp/vos pass, iq misses RS8901; sizing required for iq |
 | Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_comparator_meets_rs8901_bar` |
-| CI | ⏳ | ngspice behavioral job added; confirm green on pushed HEAD in Actions |
+| CI | ✅ | Run **#9** green on pushed HEAD `828b7d0` — unit + ngspice behavioral jobs ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27747331852)) |
 
 **Category verdict:** `working` (RS8901, bundled models) — robust across seeds; iq closed by bias sizing, tp closed by prior bench fix + valid step measurement.
 
