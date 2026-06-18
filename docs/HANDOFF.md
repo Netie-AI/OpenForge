@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
 **Updated:** 2026-06-18  
-**HEAD (after Phase 1c push):** see `git log -1` — confirm CI green on that SHA before trusting this doc.
+**HEAD:** `4c57f63` — CI run **#13** green ([Actions](https://github.com/Netie-AI/OpenForge/actions/runs/27771500132))
 
 Use this file at the **start of every new Cursor window**. Read it, then `docs/STATUS.md`, then `AGENT_PLAN.md` §0 operating rules.
 
@@ -147,7 +147,7 @@ Keep Rule 8: datasheet bar only, no dev slack, Actions tab on push.
 | `7f1947e` | CI `win_path_to_wsl` on Linux runners |
 | `828b7d0` | Phase 1a RS8901 behavioral CI gate |
 | `2390957` | Phase 1b RS2105 behavioral CI gate |
-| (Phase 1c) | RS2660 behavioral CI gate — see latest `git log` |
+| (Phase 1c) | `4c57f63` — RS2660 behavioral CI gate, handoff doc |
 
 ---
 

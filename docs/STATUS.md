@@ -51,7 +51,7 @@ Reproduce: `python scripts/verify_phase1b.py` (WSL, ngspice on PATH).
 | RS2660 bar (`make smoke`) | ✅ | seed=19 budget=250: **vout=4.999 V, ripple=0.017 mV, settle=0.003 ms**, `meets_all=True` |
 | Default params (unsized) | ✅ | **vout=4.997 V** — passes RS2660 without sizing |
 | Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_charge_pump_meets_rs2660_bar` |
-| CI | ⏳ | Confirm green on pushed HEAD in Actions |
+| CI | ✅ | Run **#13** green on pushed HEAD `4c57f63` ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27771500132)) |
 
 **Category verdict:** `working` (RS2660, bundled models) — robust across seeds; vout closed by bootstrapped topology fix (8297008), not this session.
 
