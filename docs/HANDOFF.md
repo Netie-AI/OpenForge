@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
 **Updated:** 2026-06-18  
-**HEAD:** `4c57f63` — CI run **#13** green ([Actions](https://github.com/Netie-AI/OpenForge/actions/runs/27771500132))
+**HEAD:** see `git log -1` — confirm CI green on pushed HEAD before trusting this doc.
 
 Use this file at the **start of every new Cursor window**. Read it, then `docs/STATUS.md`, then `AGENT_PLAN.md` §0 operating rules.
 
@@ -21,11 +21,10 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **Now** | **Phase 1d — opamp / RS321** | Last category in Phase 1 THE GATE |
-| Then | Phase 1 exit check | All four categories `working` in `docs/STATUS.md` + `make smoke-wsl` green |
-| Then | Phase 2 seed parser integration | Already mostly built — wire measured fraction into forge |
-| Not yet | Phase 3 SKY130 re-validation | After Phase 1 green on bundled models |
-| Not yet | Phase 5 LoRA / training | Throwaway smoke artifact exists — do **not** wire until Phase 1–4 gates pass |
+| **Now** | **Phase 1 exit verification** | `make smoke-wsl` green on HEAD; CI behavioral suite green |
+| Then | **Phase 2** — seed parser → forge | Wire `seeds_normalized.jsonl` (768/1010 sim-validated) |
+| Not yet | Phase 3 SKY130 re-validation | After Phase 1 exit confirmed on pushed HEAD |
+| Not yet | Phase 5 LoRA / training | Do **not** wire until Phase 1–4 gates pass |
 
 ---
 
@@ -48,9 +47,9 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | **1a** | comparator | RS8901 | ✅ `working` | `scripts/verify_phase1a.py` |
 | **1b** | analog_switch | RS2105 | ✅ `working` | `scripts/verify_phase1b.py` |
 | **1c** | charge_pump | RS2660 | ✅ `working` | `scripts/verify_phase1c.py` |
-| **1d** | opamp | RS321 | ⏳ **NEXT** | (create `scripts/verify_phase1d.py`) |
+| **1d** | opamp | RS321 | ✅ `working` (seed=42) | `scripts/verify_phase1d.py` |
 
-**Phase 1 exit criteria** (`AGENT_PLAN.md`): `make smoke` fitness=1 for all four categories on RS-series envelopes, each with a named behavioral test in `tests/test_ngspice_behavior.py`, CI green on pushed HEAD.
+**Phase 1 exit criteria** (`AGENT_PLAN.md`): all four `working` + `make smoke-wsl` + CI behavioral tests green on pushed HEAD.
 
 ---
 
@@ -97,42 +96,20 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ---
 
-## Copy-paste prompt — next Cursor window (Phase 1d)
+## Copy-paste prompt — next Cursor window (Phase 2)
 
 ```
-Read docs/HANDOFF.md, docs/STATUS.md, and AGENT_PLAN.md Phase 1d first.
+Read docs/HANDOFF.md and docs/STATUS.md first.
 
-Execute Phase 1d — opamp / RS321 (THE GATE, last of four):
-- Diagnose before claiming done: default vs sized params, netlist structure,
-  seed sensitivity (seeds 1, 3, 7, 42, 42), historical failures in designs.jsonl.
-- RS321 envelope: gbp=1.1MHz pm>60 aol>95dB iq<80uA slew>0.5 (spec_envelopes.py)
-- Add/strengthen test_opamp_meets_rs321_bar in test_ngspice_behavior.py
-- Add scripts/verify_phase1d.py
-- Update docs/STATUS.md Phase 1d section
-- Push, confirm Actions green on HEAD, flip CI row to ✅
-- If all four Phase 1 categories working, add Phase 1 exit summary to STATUS.md
+Phase 1 THE GATE should be closed (1a–1d all working, CI green on HEAD).
+Verify: make smoke-wsl + Actions tab on pushed HEAD.
 
-Do NOT start Phase 2, Phase 3 SKY130 re-validation, or Phase 5 training until
-Phase 1 exit criteria are met on pushed HEAD.
+Then begin Phase 2 per AGENT_PLAN.md:
+- Wire seeds_normalized.jsonl (768/1010 sim-validated) into forge fitness loop
+- Do NOT start Phase 5 LoRA training
 
-Environment: ngspice in WSL Ubuntu (.venv_wsl), OPENFORGE_WSL_DISTRO=Ubuntu.
-Follow verify/check/improve loop from AGENT_PLAN.md.
-```
-
----
-
-## Copy-paste prompt — after Phase 1 complete
-
-```
-Phase 1 exit is green (all four categories working, CI on HEAD). Read HANDOFF.md.
-
-Next per AGENT_PLAN.md:
-1. Run make smoke-wsl and document Phase 1 exit in STATUS.md
-2. Begin Phase 2 — wire seed parser / seeds_normalized.jsonl into forge fitness
-   (768/1010 sim_validated already exist)
-3. Do NOT start Phase 5 LoRA training
-
-Keep Rule 8: datasheet bar only, no dev slack, Actions tab on push.
+Environment: WSL Ubuntu, .venv_wsl, OPENFORGE_WSL_DISTRO=Ubuntu.
+Rule 8: datasheet bar only, Actions tab on push.
 ```
 
 ---

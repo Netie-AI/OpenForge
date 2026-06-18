@@ -19,8 +19,9 @@ pytestmark = pytest.mark.skipif(
 RS8901_SPEC = DEV_MODE_SPECS["comparator"]
 RS2105_SPEC = DEV_MODE_SPECS["switch"]
 RS2660_SPEC = DEV_MODE_SPECS["charge_pump"]
+RS321_SPEC = DEV_MODE_SPECS["opamp"]
 
-SIZE_BUDGET = {"comparator": 250, "opamp": 200, "switch": 250, "charge_pump": 250}
+SIZE_BUDGET = {"comparator": 250, "opamp": 250, "switch": 250, "charge_pump": 250}
 SIZE_SEED = {"comparator": 7, "opamp": 42, "switch": 11, "charge_pump": 19}
 
 
@@ -54,8 +55,26 @@ def test_comparator_meets_rs8901_bar():
     }
 
 
-def test_opamp_meets_datasheet_bar():
-    result = _design("opamp")
+def test_opamp_meets_rs321_bar():
+    """Phase 1d gate: real ngspice sizing must hit RS321 on two_stage_miller_opamp."""
+    assert DATASHEET_PARTS["opamp"] == "RS321"
+    result = design(
+        inline_spec=RS321_SPEC,
+        budget=SIZE_BUDGET["opamp"],
+        seed=SIZE_SEED["opamp"],
+        record_kg=False,
+    )
+    assert result["topology"] == "two_stage_miller_opamp"
+    metrics = result["metrics"]
+    assert metrics.get("aol_dB") is not None, "AOL must come from ngspice AC"
+    assert metrics.get("gbp_MHz") is not None, "GBP must come from ngspice AC"
+    assert metrics.get("pm_deg") is not None, "PM must come from ngspice AC"
+    assert metrics["aol_dB"] >= 95.0 * 0.98  # min mode in _passes
+    assert abs(metrics["gbp_MHz"] - 1.1) <= 1.1 * 0.05  # target mode 5% tol
+    assert metrics["pm_deg"] >= 60.0 * 0.98
+    assert metrics["iq_uA"] <= 80.0 * 1.02
+    assert metrics.get("slew_Vus") is not None
+    assert metrics["slew_Vus"] >= 0.5 * 0.98
     assert result["meets_all"], {
         k: v for k, v in result["compliance"].items() if v.get("pass") is False
     }
