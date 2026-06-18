@@ -17,7 +17,11 @@ jobs:
         run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ngspice
       - name: Install Python deps
         run: pip install -e ".[web]" pytest
-      - name: Pytest
+      - name: Pytest (unit)
         env:
           OPENFORGE_MODEL_SET: bundled
         run: python -m pytest tests/ -q --ignore=tests/test_ngspice_behavior.py --ignore=tests/test_netlist_llm_fidelity.py
+      - name: Pytest (ngspice behavioral — Phase 1 gate)
+        env:
+          OPENFORGE_MODEL_SET: bundled
+        run: python -m pytest tests/test_ngspice_behavior.py -q

@@ -6,7 +6,7 @@ import shutil
 
 import pytest
 
-from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
+from openanalog.forge.spec_envelopes import DATASHEET_PARTS, DEV_MODE_SPECS
 from openanalog.forge.topologies import get_topology
 from openanalog.interface.designer import design
 
@@ -14,6 +14,9 @@ pytestmark = pytest.mark.skipif(
     shutil.which("ngspice") is None,
     reason="ngspice not on PATH",
 )
+
+# DEV_MODE_SPECS values are the RS-series datasheet envelopes (see spec_envelopes.py).
+RS8901_SPEC = DEV_MODE_SPECS["comparator"]
 
 SIZE_BUDGET = {"comparator": 250, "opamp": 200, "switch": 150, "charge_pump": 120}
 SIZE_SEED = {"comparator": 7, "opamp": 42, "switch": 11, "charge_pump": 19}
@@ -28,8 +31,22 @@ def _design(cat: str) -> dict:
     )
 
 
-def test_comparator_meets_datasheet_bar():
-    result = _design("comparator")
+def test_comparator_meets_rs8901_bar():
+    """Phase 1a gate: real ngspice sizing must hit RS8901 tp/vos/iq on diff_pair_comparator."""
+    assert DATASHEET_PARTS["comparator"] == "RS8901"
+    result = design(
+        inline_spec=RS8901_SPEC,
+        budget=SIZE_BUDGET["comparator"],
+        seed=SIZE_SEED["comparator"],
+        record_kg=False,
+    )
+    assert result["topology"] == "diff_pair_comparator"
+    metrics = result["metrics"]
+    assert metrics.get("tp_us") is not None, "tp must come from ngspice .tran (not scoring stub)"
+    assert metrics.get("iq_uA") is not None, "iq must come from ngspice OP (not scoring stub)"
+    assert metrics["tp_us"] < 1.0
+    assert metrics["iq_uA"] < 1.0
+    assert metrics["vos_mV"] < 3.0
     assert result["meets_all"], {
         k: v for k, v in result["compliance"].items() if v.get("pass") is False
     }

@@ -1,6 +1,25 @@
-# OpenForge category status (updated 2026-06-17)
+# OpenForge category status (updated 2026-06-18)
 
 Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes.py`.
+
+## Phase 1a — Comparator / RS8901 (2026-06-18)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Netlist structure | ✅ | Default vs seed=7 sized: **11 devices, identical connectivity** (only `.param` W/L/Iref/Rload change). Verified via `scripts/verify_phase1a.py`. |
+| Sizing causal story (iq) | ✅ | **Iref 500 nA → 71 nA (7× down)** is the main iq move: 1.58 µA → 0.62 µA. Secondary: W3↓ (lighter diff load), Rload 50 kΩ→23 kΩ, W5↑ (tail width). **tp barely moves with sizing** (0.21→0.19 µs at defaults vs seed=7). |
+| tp / 8 µs history | ✅ | **Not a sizing win.** Stored “failed” params (`designs.jsonl` line 6) still measure **tp=0.23 µs today**. Old tran deck (`83bcb4d`) on same params gives **tp=8.08 µs**; current deck gives **0.23 µs** — fixed in commit **`99d68df`** (stimulus + `t_plh` target edge). The ~40× tp gap was a **measurement-deck fix already on main**, not this session’s sizing. |
+| Symptom reconciliation | ✅ | **113 µA** = loose `iq<200 µA` profile (not RS8901). **8 µs** = old `.tran` bench on RS8901 params (iq ~5–6 µA on those records). Never one combined RS8901 run. |
+| Seed sensitivity (budget=250) | ✅ | **4/4 pass** (seeds 1, 3, 7, 12): tp 0.19–0.97 µs, iq 0.30–0.77 µA, vos <0.31 mV. Not seed-7-only. |
+| tp bench sanity | ⚠️ | Current deck: 300 mV input step, **50 ps edges**, vout trip at 50% VDD, **no explicit Cload** (Rload only). RS8901 product sample cites typ **0.8 µs** / **0.5 µA** — all sized seeds beat `<1 µs` bar; Rload sweep 10–100 kΩ moves tp 0.14–0.22 µs (seed=7 params). Fast edges + no output cap may be **optimistic vs full datasheet fixture**; still real ngspice step response, not scoring stub. |
+| RS8901 bar (`make smoke`) | ✅ | seed=7 budget=250: **tp=0.19 µs, vos=0.30 mV, iq=0.62 µA**, `meets_all=True` |
+| Default params (unsized) | ⚠️ | **tp=0.21 µs, iq=1.58 µA** — tp/vos pass, iq misses RS8901; sizing required for iq |
+| Behavioral test | ✅ | `tests/test_ngspice_behavior.py::test_comparator_meets_rs8901_bar` |
+| CI | ⏳ | ngspice behavioral job added; confirm green on pushed HEAD in Actions |
+
+**Category verdict:** `working` (RS8901, bundled models) — robust across seeds; iq closed by bias sizing, tp closed by prior bench fix + valid step measurement.
+
+Reproduce: `python scripts/verify_phase1a.py` (WSL, ngspice on PATH).
 
 ## Phase 0 — Infrastructure (2026-06-17)
 
