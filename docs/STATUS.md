@@ -100,7 +100,8 @@ All four have named behavioral tests in CI. Run `make smoke-wsl` on pushed HEAD 
 | Fitness path | ✅ | `evaluate_forge_fitness()` scores raw seed netlists on RS bar (`forge_eval.py` + `netlist_measure.py`) |
 | Forge wiring | ✅ | `openanalog/forge/seed_scoring.py`; `run_forge(..., score_seeds=True)` scores up to 25 benchable seeds at start |
 | CLI | ✅ | `python -m openanalog forge --score-seeds/--no-score-seeds --seed-score-limit N` |
-| Verification | ⏳ | `python scripts/verify_phase2.py` — corpus ≥500 sim_validated + sample scoring |
+| Verification | ✅ | `python scripts/verify_phase2.py` — 768 sim_validated, sample scoring wired (2026-06-19) |
+| CI | ✅ | Run **#18** green on pushed HEAD `6bc0599` ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27799932447)) |
 | Raw seed fitness=1 | ⚠️ | Expected rare — seeds are topology starters, not RS-sized designs; wiring gate ≠ pass rate |
 
 Reproduce: `python scripts/verify_phase2.py` (WSL, ngspice on PATH).
@@ -140,7 +141,21 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 # → http://127.0.0.1:8090  (8080 blocked — Windows excluded port range)
 ```
 
-## Phase 3 Status (2026-06-15)
+## Phase 3 — SKY130 PDK (2026-06-19, in progress)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Config switch | ✅ | `OPENFORGE_MODEL_SET=bundled\|sky130`; `OPENFORGE_SKY130_CARD=level1\|bsim` |
+| SKY130 level-1 smoke | ✅ | All 5 dev-mode categories pass RS bar (`OPENFORGE_MODEL_SET=sky130`, default card) |
+| BSIM subckt emit | ✅ | `mos_line`/`mos_inst` emit `X` instances for fetched BSIM4 subckts (fixes "can't find model") |
+| BSIM card sim | ⏳ | Fetched `models.sp` loads but pfet BSIM4 `.model` params fail ngspice substitute (`Cannot compute substitute`) — needs further PDK/volare work |
+| vref bandgap | ⏳ | Topology exists; needs SKY130 BJT validation once BSIM cards sim cleanly |
+| volare pin | ⏳ | `scripts/fetch_sky130_models.py` pins `google/skywater-pdk-libs-sky130_fd_pr@main` — needs explicit commit hash |
+
+Reproduce level-1 SKY130: `OPENFORGE_MODEL_SET=sky130 make smoke-wsl`  
+Diagnose BSIM: `OPENFORGE_SKY130_CARD=bsim python scripts/diag_sky130_bsim.py` (WSL)
+
+## Phase 3 Status (2026-06-15, superseded — see above)
 
 | Category    | Bundled | SKY130  | Notes                              |
 |-------------|---------|---------|-------------------------------------|
