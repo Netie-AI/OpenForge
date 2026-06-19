@@ -22,7 +22,9 @@ data/forge_state.json
 checkpoint.json
 data/kg/
 *.sp
-.cursor/
+.cursor/*
+!.cursor/.skills/
+!.cursor/.skills/**
 *.egg-info/
 b3v33check.log
 data/api_usage.jsonl
