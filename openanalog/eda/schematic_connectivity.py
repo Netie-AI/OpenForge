@@ -47,10 +47,10 @@ def parse_wire_segments(svg: str) -> list[tuple[int, int, int, int, bool]]:
     segments: list[tuple[int, int, int, int, bool]] = []
     for m in _LINE_RE.finditer(svg):
         attrs = m.group(5)
-        if 'class="signal-wire"' not in attrs:
+        if "signal-wire" not in attrs:
             continue
         x1, y1, x2, y2 = (int(m.group(i)) for i in range(1, 5))
-        segments.append((x1, y1, x2, y2, 'class="io-stub"' in attrs))
+        segments.append((x1, y1, x2, y2, "io-stub" in attrs))
     return segments
 
 
@@ -120,17 +120,73 @@ def _connected_component(
     return seen
 
 
-def _terminal_on_wire(
+def _terminal_on_segment(
     pt: tuple[int, int],
     segments: list[tuple[int, int, int, int, bool]],
+    *,
+    io_only: bool = False,
+    signal_only: bool = False,
 ) -> bool:
     x, y = pt
     for x1, y1, x2, y2, is_io in segments:
-        if is_io:
+        if io_only and not is_io:
+            continue
+        if signal_only and is_io:
             continue
         if _point_on_segment(x, y, x1, y1, x2, y2):
             return True
     return False
+
+
+def _terminal_on_wire(
+    pt: tuple[int, int],
+    segments: list[tuple[int, int, int, int, bool]],
+) -> bool:
+    return _terminal_on_segment(pt, segments, signal_only=True)
+
+
+def _io_terminal_targets(placed: list[PlacedDevice]) -> dict[str, tuple[int, int]]:
+    """External nets and the schematic terminal each IO stub must reach."""
+    targets: dict[str, tuple[int, int]] = {}
+    for pd in placed:
+        for node, pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).items():
+            nl = node.lower()
+            if nl in ("vinp", "vinn"):
+                targets[nl] = _pt_key(pt)
+            elif nl == "vout" and (nl not in targets or pd.dev.kind == "M"):
+                targets[nl] = _pt_key(pt)
+    return targets
+
+
+def _verify_io_stubs(
+    placed: list[PlacedDevice],
+    segments: list[tuple[int, int, int, int, bool]],
+) -> list[str]:
+    """IO stub segments must reach their device terminals (external end may dangle)."""
+    errors: list[str] = []
+    io_segments = [s for s in segments if s[4]]
+    if not io_segments:
+        errors.append("no io-stub segments found in schematic SVG")
+        return errors
+
+    targets = _io_terminal_targets(placed)
+    label_map = {"vinp": "IN+", "vinn": "IN-", "vout": "OUT"}
+    for net, pt in targets.items():
+        if not _terminal_on_segment(pt, io_segments, io_only=True):
+            label = label_map.get(net, net)
+            errors.append(
+                f"io stub for {label} ({net}) does not reach terminal at ({pt[0]}, {pt[1]})"
+            )
+
+    terminal_pts = set(targets.values())
+    for x1, y1, x2, y2, _ in io_segments:
+        for x, y in ((x1, y1), (x2, y2)):
+            if (x, y) in terminal_pts:
+                continue
+            if _terminal_on_segment((x, y), segments, signal_only=True):
+                continue
+            # External pin end — allowed to dangle.
+    return errors
 
 
 def _rail_endpoints(
@@ -346,6 +402,7 @@ def verify_schematic_connectivity(
             errors.append(f"net {net}: extra pins in wire graph: {sorted(extra)}")
 
     errors.extend(_false_junction_at_crossings(segments, tmap, junctions))
+    errors.extend(_verify_io_stubs(placed, segments))
 
     return errors
 
@@ -371,7 +428,11 @@ def anchor_wire_diffs(
                 if _terminal_on_wire(key, segments) or key in rail_pts:
                     continue
             if node.lower().startswith("vin") or node.lower() in ("inp", "inn"):
-                # Input gates may terminate at io-stub lines only.
+                if _terminal_on_segment(key, segments, io_only=True):
+                    continue
+                diffs.append(
+                    f"{pd.dev.name}.{node} anchor ({pt.x}, {pt.y}) not on wire or io-stub"
+                )
                 continue
             if _terminal_on_wire(key, segments):
                 continue

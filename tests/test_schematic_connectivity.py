@@ -71,6 +71,20 @@ def test_mirrored_device_anchors_match_svg_transform(floorplan_case):
             assert on_wire, f"{pd.dev.name}.{node} mirrored anchor ({pt.x},{pt.y}) off wire"
 
 
+def test_io_stubs_reach_terminals(floorplan_case):
+    """External IO stubs must land on input/output device terminals."""
+    name, result, devices = floorplan_case
+    from openanalog.eda.schematic_connectivity import _verify_io_stubs, _io_terminal_targets
+
+    svg = render_schematic_svg(devices, result)
+    layout = build_schematic_layout(devices, result)
+    segments = parse_wire_segments(svg)
+    targets = _io_terminal_targets(layout.placed)
+    assert targets, f"{name}: no IO terminals found in layout"
+    errors = _verify_io_stubs(layout.placed, segments)
+    assert not errors, f"{name} IO stub errors:\n" + "\n".join(errors)
+
+
 def test_netlist_pins_match_terminal_map(floorplan_case):
     name, result, devices = floorplan_case
     layout = build_schematic_layout(devices, result)

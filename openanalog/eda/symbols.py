@@ -166,7 +166,7 @@ def render_symbol(
     ty = oy + sym.height + 12
     return (
         f"{body}\n"
-        f'<text x="{tx}" y="{ty}" fill="#d6deeb" font="10px ui-monospace,monospace">{name}</text>\n'
+        f'<text x="{tx}" y="{ty}" class="mono" fill="#d6deeb">{name}</text>\n'
     )
 
 

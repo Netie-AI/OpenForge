@@ -12,10 +12,23 @@ from openanalog.eda.symbols import Point, render_symbol, snap, terminal_position
 
 log = logging.getLogger(__name__)
 
-_WIRE = 'stroke="#5ad1c9" stroke-width="1.5" class="signal-wire"'
-_RAIL = 'stroke="#5ad1c9" stroke-width="2" class="signal-wire"'
+_WIRE_CLASS = 'class="signal-wire"'
+_RAIL_CLASS = 'class="signal-wire rail"'
 _DOT = 'fill="#5ad1c9"'
-_DIM = 'fill="#8a97ad" font="9px ui-monospace,monospace"'
+_DIM = 'class="dim" fill="#8a97ad"'
+_TITLE = 'class="title" fill="#5ad1c9"'
+_VDD_LABEL = 'class="rail-label" fill="#5ad1c9"'
+_MONO = 'class="mono" fill="#d6deeb"'
+_MILLER = 'class="mono" fill="#ffcc66"'
+
+_SVG_STYLES = """<style>
+  .signal-wire{stroke:#5ad1c9;stroke-width:1.5;fill:none}
+  .signal-wire.rail{stroke-width:2}
+  .dim{font:9px ui-monospace,monospace}
+  .title{font:bold 13px sans-serif}
+  .rail-label{font:bold 11px sans-serif}
+  .mono{font:10px ui-monospace,monospace}
+</style>"""
 
 # Topology names with defined floorplans.
 _FLOORPLAN_TOPOLOGIES = frozenset({"two_stage_miller_opamp", "diff_pair_comparator"})
@@ -201,7 +214,7 @@ def _route_net(points: list[Point]) -> tuple[str, set[Point]]:
 
     if len(points) == 2:
         for x1, y1, x2, y2 in _manhattan(points[0], points[1]):
-            lines.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {_WIRE}/>')
+            lines.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {_WIRE_CLASS}/>')
         return "\n".join(lines) + "\n", junctions
 
     jx = snap(sum(p.x for p in points) // len(points))
@@ -210,7 +223,7 @@ def _route_net(points: list[Point]) -> tuple[str, set[Point]]:
     junctions.add(junction)
     for pt in points:
         for x1, y1, x2, y2 in _manhattan(pt, junction):
-            lines.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {_WIRE}/>')
+            lines.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {_WIRE_CLASS}/>')
     return "\n".join(lines) + "\n", junctions
 
 
@@ -241,19 +254,19 @@ def _draw_rails(
 
     vdd_pts = _vdd_nodes(nets)
     if vdd_pts:
-        body += f'<line x1="{margin}" y1="{vdd_y}" x2="{width - margin}" y2="{vdd_y}" {_RAIL}/>\n'
-        body += f'<text x="{margin}" y="{vdd_y - 8}" fill="#5ad1c9" font="bold 11px sans-serif">VDD</text>\n'
+        body += f'<line x1="{margin}" y1="{vdd_y}" x2="{width - margin}" y2="{vdd_y}" {_RAIL_CLASS}/>\n'
+        body += f'<text x="{margin}" y="{vdd_y - 8}" {_VDD_LABEL}>VDD</text>\n'
         for pt in vdd_pts:
             stub_x = pt.x
-            body += f'<line x1="{stub_x}" y1="{vdd_y}" x2="{stub_x}" y2="{pt.y}" {_WIRE}/>\n'
+            body += f'<line x1="{stub_x}" y1="{vdd_y}" x2="{stub_x}" y2="{pt.y}" {_WIRE_CLASS}/>\n'
 
     gnd_pts = _gnd_points(placed)
     if gnd_pts:
-        body += f'<line x1="{margin}" y1="{gnd_y}" x2="{width - margin}" y2="{gnd_y}" {_RAIL}/>\n'
+        body += f'<line x1="{margin}" y1="{gnd_y}" x2="{width - margin}" y2="{gnd_y}" {_RAIL_CLASS}/>\n'
         body += f'<text x="{margin}" y="{gnd_y + 16}" {_DIM}>GND</text>\n'
         for pt in gnd_pts:
             stub_x = pt.x
-            body += f'<line x1="{stub_x}" y1="{pt.y}" x2="{stub_x}" y2="{gnd_y}" {_WIRE}/>\n'
+            body += f'<line x1="{stub_x}" y1="{pt.y}" x2="{stub_x}" y2="{gnd_y}" {_WIRE_CLASS}/>\n'
 
     return body
 
@@ -265,20 +278,50 @@ def _draw_miller_cap(dev: SpiceDevice, origin: Point) -> str:
         f'<line x1="{ox + 24}" y1="{oy + 26}" x2="{ox + 24}" y2="{oy + 34}" stroke="#ffcc66" stroke-width="2"/>\n'
         f'<line x1="{ox + 30}" y1="{oy + 26}" x2="{ox + 30}" y2="{oy + 34}" stroke="#ffcc66" stroke-width="2"/>\n'
         f'<line x1="{ox + 34}" y1="{oy + 30}" x2="{ox + 54}" y2="{oy}" stroke="#ffcc66" stroke-width="1.5"/>\n'
-        f'<text x="{ox + 8}" y="{oy + 48}" fill="#ffcc66" font="9px ui-monospace,monospace">{dev.name}</text>\n'
+        f'<text x="{ox + 8}" y="{oy + 48}" {_MILLER}>{dev.name}</text>\n'
     )
 
 
-def _pin_labels(topology: str) -> str:
+def _io_terminals(placed: list[PlacedDevice]) -> dict[str, Point]:
+    """Map external net names to the device terminal they must reach."""
+    io: dict[str, Point] = {}
+    for pd in placed:
+        for node, pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).items():
+            nl = node.lower()
+            if nl in ("vinp", "vinn"):
+                io[nl] = pt
+            elif nl == "vout" and (nl not in io or pd.dev.kind == "M"):
+                io[nl] = pt
+    return io
+
+
+def _pin_labels(placed: list[PlacedDevice], topology: str, width: int) -> str:
     labels = ""
     topo = topology.lower()
-    if topo in _FLOORPLAN_TOPOLOGIES or "opamp" in topo or "comparator" in topo:
-        labels += f'<text x="50" y="238" {_DIM}>IN+</text>\n'
-        labels += f'<line x1="70" y1="234" x2="130" y2="234" {_WIRE} class="io-stub"/>\n'
-        labels += f'<text x="350" y="238" {_DIM}>IN-</text>\n'
-        labels += f'<line x1="370" y1="234" x2="330" y2="234" {_WIRE} class="io-stub"/>\n'
-        labels += f'<text x="500" y="128" {_DIM}>OUT</text>\n'
-        labels += f'<line x1="480" y1="124" x2="450" y2="124" {_WIRE} class="io-stub"/>\n'
+    if topo not in _FLOORPLAN_TOPOLOGIES and "opamp" not in topo and "comparator" not in topo:
+        return labels
+
+    io = _io_terminals(placed)
+    if "vinp" in io:
+        g = io["vinp"]
+        labels += f'<text x="50" y="{g.y + 4}" {_DIM}>IN+</text>\n'
+        labels += (
+            f'<line x1="70" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
+        )
+    if "vinn" in io:
+        g = io["vinn"]
+        ext_x = max(width - 70, g.x + 40)
+        labels += f'<text x="{ext_x + 8}" y="{g.y + 4}" {_DIM}>IN-</text>\n'
+        labels += (
+            f'<line x1="{ext_x}" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
+        )
+    if "vout" in io:
+        g = io["vout"]
+        ext_x = max(width - 70, g.x + 20)
+        labels += f'<text x="{ext_x + 10}" y="{g.y + 4}" {_DIM}>OUT</text>\n'
+        labels += (
+            f'<line x1="{ext_x}" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
+        )
     return labels
 
 
@@ -342,16 +385,14 @@ def render_schematic_svg(
             all_junctions |= junctions
 
     body += _draw_rails(layout.placed, nets, layout.width, layout.height)
-    body += _pin_labels(layout.topology)
+    body += _pin_labels(layout.placed, layout.topology, layout.width)
 
     for j in all_junctions:
         body += f'<circle cx="{j.x}" cy="{j.y}" r="3" {_DOT}/>\n'
 
     title = layout.topology or "circuit"
     head = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {layout.width} {layout.height}" width="{layout.width}" height="{layout.height}">
-<style>
-  .wire{{{_WIRE};fill:none}}
-</style>
-<text x="20" y="22" fill="#5ad1c9" font="bold 13px sans-serif">{title} · {layout.title_suffix}</text>
+{_SVG_STYLES}
+<text x="20" y="22" {_TITLE}>{title} · {layout.title_suffix}</text>
 """
     return head + body + "</svg>"
