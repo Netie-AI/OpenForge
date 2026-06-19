@@ -44,9 +44,9 @@ Reproduce: `python scripts/verify_phase1b.py` (WSL, ngspice on PATH).
 | Item | Status | Notes |
 |------|--------|-------|
 | Topology | ✅ | Bootstrapped **2-stage NMOS Dickson** (`dickson_charge_pump`): gate bootstrapped above VDD via Cboot + Dboot per stage. Fixed in **`8297008`** / **`2c90319`**. |
-| **What closed the category** | ✅ | **Bootstrap fix closed it; sizing was confirmatory only.** Default vout=**4.997 V** already passes RS2660; sized vout=**4.999 V** (+0.04%). This round did not close a real vout gap — it verified the gate and tuned ripple/settle marginally. |
-| Target-mode tolerance | ✅ | **`score_design._passes` default `tol=0.05` (5%)** — read from `openanalog/forge/sizer.py` line 36–44. For vout target=5 V: pass band **4.75–5.25 V**. Measured 4.999 V passes at 5%; would also pass old 30% band (3.5–6.5 V), so **this number alone does not prove no tolerance regression** — regression check is the code read above, not the measurement. |
-| Duplicate instance grep | ✅ | seed=19 sized netlist: **13 device instances, zero duplicate names** (`grep` first-token check on emitted netlist, 2026-06-18). Historical duplicate-`C0` suspect: **checked, none found.** |
+| **What closed the category** | ✅ | **The bootstrap fix (`8297008`/`2c90319`) closed RS2660 — not the sizer.** Default vout=**4.997 V** already passes before sizing; seed=19 sized vout=**4.999 V** is a **+0.04%** confirmatory tweak (ripple/settle margin only). Do not read this as "the sizer closed a real vout gap." |
+| Target-mode tolerance | ✅ | **Re-verified 2026-06-19:** `score_design` → `_passes(..., tol=0.05)` in `openanalog/forge/sizer.py` lines 36–44, 87 — **5% default, not 30%.** Target vout=5 V pass band **4.75–5.25 V**. Measured 4.999 V passes at 5%; would also pass old 30% band (3.5–6.5 V), so **this measurement alone does not prove no regression** — the code read confirms 5% is still in effect. |
+| Duplicate instance grep | ✅ | **Re-verified 2026-06-19:** seed=19 sized netlist — **13 device instances, duplicate names: NONE** (first-token grep on emitted netlist). Historical duplicate-`C0` suspect: **checked, none found.** |
 | Prior ~4.1–4.3 V history | ✅ | Pre-bootstrap diode/NMOS pump (`6b2d356` era) lost ~Vth per stage → ~4.27 V in `designs.jsonl` (also passed under old 30% tolerance — false pass). Bootstrapped topology today: **vout≈5.0 V** at defaults. |
 | Seed sensitivity (budget=250) | ✅ | **6/6 pass** (seeds 1, 3, 7, 11, 19, 42): vout 4.998–4.999 V, ripple <0.08 mV, settle <0.02 ms. |
 | Bench sanity | ✅ | `.tran` avg vout over last 30% window; ripple pp same window. Product sample: vout=5 V, ripple=30 mV, settle=3 ms — results consistent, ripple/settle well inside bar. |
@@ -88,6 +88,22 @@ Reproduce: `python scripts/verify_phase1d.py` (WSL, ngspice on PATH).
 | opamp | RS321 | ✅ `working` (seed=42; AOL variance noted) |
 
 All four have named behavioral tests in CI. Run `make smoke-wsl` on pushed HEAD to confirm end-to-end.
+
+**Phase 1 exit verified 2026-06-19:** `make smoke-wsl` green on HEAD `515e8a8` — 5 dev-mode categories pass RS bar (opamp seed=42, comparator seed=7, switch seed=11, charge_pump seed=19, ldo seed=23).
+
+## Phase 2 — Seed corpus → forge fitness (2026-06-19)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Corpus | ✅ | `data/seeds_normalized.jsonl`: **1010 total, 768 sim_validated (76%)**, **634 benchable sim_validated** (opamp=563, comparator=38, switch=33) |
+| Dialect converter | ✅ | `dialect.py` + `converter.py` — Masala/AnalogGenie paren → ngspice-flat |
+| Fitness path | ✅ | `evaluate_forge_fitness()` scores raw seed netlists on RS bar (`forge_eval.py` + `netlist_measure.py`) |
+| Forge wiring | ✅ | `openanalog/forge/seed_scoring.py`; `run_forge(..., score_seeds=True)` scores up to 25 benchable seeds at start |
+| CLI | ✅ | `python -m openanalog forge --score-seeds/--no-score-seeds --seed-score-limit N` |
+| Verification | ⏳ | `python scripts/verify_phase2.py` — corpus ≥500 sim_validated + sample scoring |
+| Raw seed fitness=1 | ⚠️ | Expected rare — seeds are topology starters, not RS-sized designs; wiring gate ≠ pass rate |
+
+Reproduce: `python scripts/verify_phase2.py` (WSL, ngspice on PATH).
 
 ## Phase 0 — Infrastructure (2026-06-17)
 

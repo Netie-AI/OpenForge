@@ -2,6 +2,9 @@
 """Phase 1c verification: charge pump vs RS2660 bar."""
 from __future__ import annotations
 
+from collections import Counter
+
+from openanalog.forge.sizer import _passes
 from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
 from openanalog.forge.topologies.charge_pump import ChargePumpParams, ChargePumpTopology
 from openanalog.interface.designer import design
@@ -13,6 +16,17 @@ SEEDS = [1, 3, 7, 11, 19, 42]
 
 def _ratio(a: float, b: float) -> str:
     return f"{a / b:.2f}x" if b else "inf"
+
+
+def _dup_device_names(netlist: str) -> list[str]:
+    names = []
+    for line in netlist.splitlines():
+        s = line.strip()
+        if not s or s.startswith("*") or s.startswith("."):
+            continue
+        if s[0] in "MRCVDI":
+            names.append(s.split()[0])
+    return [n for n, c in Counter(names).items() if c > 1]
 
 
 def main() -> None:
@@ -43,13 +57,20 @@ def main() -> None:
 
     print("\n(d) Causal story:")
     print(
-        "    vout→5V: bootstrapped NMOS Dickson (8297008) eliminates Vth drop; "
-        "sizer raises freq + tightens cap/rload for light-load regulation."
+        "    Bootstrap fix (8297008/2c90319) closed vout — sizing was confirmatory only "
+        f"(default {dm.values.get('vout_V'):.3f}V -> sized {m.get('vout_V'):.3f}V)."
     )
-    print(
-        f"    Default vout={dm.values.get('vout_V'):.3f}V already near bar; "
-        f"sized vout={m.get('vout_V'):.3f}V hits target mode."
-    )
+
+    print("\n(e) Target-mode tolerance (_passes default tol=0.05 = 5%):")
+    vout = float(m.get("vout_V", 0))
+    target = 5.0
+    tol = 0.05
+    print(f"    vout={vout:.3f} target={target} pass band [{target * (1 - tol):.3f},{target * (1 + tol):.3f}]")
+    print(f"    _passes at 5%: {_passes(vout, target, 'target', tol=tol)}")
+    print(f"    would pass old 30% band [3.5,6.5]: {abs(vout - target) <= target * 0.30}")
+
+    dups = _dup_device_names(r19["netlist"])
+    print(f"\n(f) Duplicate device names (seed=19 netlist): {dups if dups else 'NONE'}")
 
     print("\n" + "=" * 70)
     print("2. SEED SENSITIVITY (budget=250)")

@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-18  
-**HEAD:** `d27ccca` — CI run **#16** green ([Actions](https://github.com/Netie-AI/OpenForge/actions/runs/27774104165)). **Phase 1 THE GATE closed.**
+**Updated:** 2026-06-19  
+**HEAD:** Phase 1 closed (`515e8a8` CI #16 green). **Phase 2 in progress** — seed corpus → `evaluate_forge_fitness`.
 
 Use this file at the **start of every new Cursor window**. Read it, then `docs/STATUS.md`, then `AGENT_PLAN.md` §0 operating rules.
 
@@ -21,9 +21,9 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **Now** | **Phase 1 exit verification** | `make smoke-wsl` green on HEAD; CI behavioral suite green |
-| Then | **Phase 2** — seed parser → forge | Wire `seeds_normalized.jsonl` (768/1010 sim-validated) |
-| Not yet | Phase 3 SKY130 re-validation | After Phase 1 exit confirmed on pushed HEAD |
+| **Now** | **Phase 2** — seed parser → forge | Wire `seeds_normalized.jsonl` (768/1010 sim-validated) via `seed_scoring.py` + forge `--score-seeds` |
+| Then | Phase 2 exit verification | `python scripts/verify_phase2.py` + unit tests green |
+| Not yet | Phase 3 SKY130 re-validation | After Phase 2 exit |
 | Not yet | Phase 5 LoRA / training | Do **not** wire until Phase 1–4 gates pass |
 
 ---
@@ -96,20 +96,19 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ---
 
-## Copy-paste prompt — next Cursor window (Phase 2)
+## Copy-paste prompt — next Cursor window (Phase 2 exit)
 
 ```
 Read docs/HANDOFF.md and docs/STATUS.md first.
 
-Phase 1 THE GATE should be closed (1a–1d all working, CI green on HEAD).
-Verify: make smoke-wsl + Actions tab on pushed HEAD.
+Phase 1 THE GATE is closed (1a–1d, CI #16 green on 515e8a8).
+Phase 2 wiring started: openanalog/forge/seed_scoring.py + forge --score-seeds.
 
-Then begin Phase 2 per AGENT_PLAN.md:
-- Wire seeds_normalized.jsonl (768/1010 sim-validated) into forge fitness loop
-- Do NOT start Phase 5 LoRA training
+Verify: python scripts/verify_phase2.py (WSL) + pytest tests/test_seed_fitness.py
+Push when green; check Actions tab.
 
+Do NOT start Phase 5 LoRA training.
 Environment: WSL Ubuntu, .venv_wsl, OPENFORGE_WSL_DISTRO=Ubuntu.
-Rule 8: datasheet bar only, Actions tab on push.
 ```
 
 ---
