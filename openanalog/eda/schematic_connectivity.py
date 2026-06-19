@@ -15,6 +15,7 @@ from openanalog.eda.schematic_layout import (
     build_schematic_layout,
     render_schematic_svg,
 )
+from openanalog.eda.schematic_router import STUB_LEN, terminal_stub
 from openanalog.eda.symbols import Point, terminal_positions
 
 _LINE_RE = re.compile(
@@ -52,6 +53,28 @@ def parse_wire_segments(svg: str) -> list[tuple[int, int, int, int, bool]]:
         x1, y1, x2, y2 = (int(m.group(i)) for i in range(1, 5))
         segments.append((x1, y1, x2, y2, "io-stub" in attrs))
     return segments
+
+
+def parse_terminal_stub_segments(svg: str) -> list[tuple[int, int, int, int]]:
+    """Return device terminal stub segments (Phase 0.8)."""
+    stubs: list[tuple[int, int, int, int]] = []
+    for m in _LINE_RE.finditer(svg):
+        attrs = m.group(5)
+        if "terminal-stub" not in attrs:
+            continue
+        stubs.append(tuple(int(m.group(i)) for i in range(1, 5)))  # type: ignore[misc]
+    return stubs
+
+
+def parse_terminal_stub_segments(svg: str) -> list[tuple[int, int, int, int]]:
+    """Return device terminal stub segments (Phase 0.8)."""
+    stubs: list[tuple[int, int, int, int]] = []
+    for m in _LINE_RE.finditer(svg):
+        attrs = m.group(5)
+        if "terminal-stub" not in attrs:
+            continue
+        stubs.append(tuple(int(m.group(i)) for i in range(1, 5)))  # type: ignore[misc]
+    return stubs
 
 
 def junction_points(svg: str) -> set[tuple[int, int]]:
@@ -225,8 +248,11 @@ def _allowed_dangling_points(
 ) -> set[tuple[int, int]]:
     allowed: set[tuple[int, int]] = set()
     for pd in placed:
-        for pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).values():
+        for node, pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).items():
             allowed.add(_pt_key(pt))
+            if node != "0" and node.lower() not in ("vdd", "vdd3"):
+                stub = terminal_stub(pd.dev, pd.origin, node, mirror=pd.mirror)
+                allowed.add(_pt_key(stub.stub_end))
     allowed |= junction_points(svg)
     allowed |= _rail_endpoints(placed, nets, width, height)
     return allowed
@@ -438,3 +464,52 @@ def anchor_wire_diffs(
                 continue
             diffs.append(f"{pd.dev.name}.{node} anchor ({pt.x}, {pt.y}) not on wire")
     return diffs
+
+
+def verify_terminal_stubs(
+    placed: list[PlacedDevice],
+    svg: str,
+) -> list[str]:
+    """Every device terminal must have a collinear stub before the first fold."""
+    errors: list[str] = []
+    stub_segs = parse_terminal_stub_segments(svg)
+    for pd in placed:
+        for node, pt in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).items():
+            nl = node.lower()
+            if node == "0" or nl in ("vdd", "vdd3") or nl.startswith("vin"):
+                continue
+            stub = terminal_stub(pd.dev, pd.origin, node, mirror=pd.mirror)
+            tx, ty = pt.x, pt.y
+            sx, sy = stub.stub_end.x, stub.stub_end.y
+
+            stub_seg = None
+            for x1, y1, x2, y2 in stub_segs:
+                ends = {(x1, y1), (x2, y2)}
+                if (tx, ty) in ends and (sx, sy) in ends:
+                    stub_seg = (x1, y1, x2, y2)
+                    break
+            if stub_seg is None:
+                errors.append(
+                    f"{pd.dev.name}.{node}: missing collinear stub from ({tx},{ty}) to ({sx},{sy})"
+                )
+                continue
+
+            x1, y1, x2, y2 = stub_seg
+            dx, dy = sx - tx, sy - ty
+            seg_dx, seg_dy = x2 - x1, y2 - y1
+            length = abs(seg_dx) + abs(seg_dy)
+            if length == 0 or length > STUB_LEN + 1:
+                errors.append(
+                    f"{pd.dev.name}.{node}: stub length {length} exceeds {STUB_LEN}px"
+                )
+            if not ((dx == 0 and seg_dx == 0) or (dy == 0 and seg_dy == 0)):
+                errors.append(
+                    f"{pd.dev.name}.{node}: stub not collinear with natural direction"
+                )
+            if (dx != 0 and (seg_dx // abs(seg_dx)) != (dx // abs(dx))) or (
+                dy != 0 and (seg_dy // abs(seg_dy)) != (dy // abs(dy))
+            ):
+                errors.append(
+                    f"{pd.dev.name}.{node}: stub points wrong way from terminal"
+                )
+    return errors

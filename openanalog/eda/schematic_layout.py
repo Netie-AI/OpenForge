@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from openanalog.eda.netlist_graph import SpiceDevice
+from openanalog.eda.schematic_router import route_nets, segments_to_svg_lines
 from openanalog.eda.symbols import Point, render_symbol, snap, terminal_positions
 
 log = logging.getLogger(__name__)
@@ -198,35 +199,6 @@ def _collect_net_points(placed: list[PlacedDevice]) -> dict[str, list[Point]]:
     return nets
 
 
-def _manhattan(a: Point, b: Point) -> list[tuple[int, int, int, int]]:
-    if a.x == b.x or a.y == b.y:
-        return [(a.x, a.y, b.x, b.y)]
-    mid = Point(b.x, a.y)
-    return [(a.x, a.y, mid.x, mid.y), (mid.x, mid.y, b.x, b.y)]
-
-
-def _route_net(points: list[Point]) -> tuple[str, set[Point]]:
-    if len(points) < 2:
-        return "", set()
-
-    lines: list[str] = []
-    junctions: set[Point] = set()
-
-    if len(points) == 2:
-        for x1, y1, x2, y2 in _manhattan(points[0], points[1]):
-            lines.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {_WIRE_CLASS}/>')
-        return "\n".join(lines) + "\n", junctions
-
-    jx = snap(sum(p.x for p in points) // len(points))
-    jy = snap(sum(p.y for p in points) // len(points))
-    junction = Point(jx, jy)
-    junctions.add(junction)
-    for pt in points:
-        for x1, y1, x2, y2 in _manhattan(pt, junction):
-            lines.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {_WIRE_CLASS}/>')
-    return "\n".join(lines) + "\n", junctions
-
-
 def _vdd_nodes(nets: dict[str, list[Point]]) -> list[Point]:
     return nets.get("vdd", []) + nets.get("vdd3", [])
 
@@ -366,24 +338,11 @@ def render_schematic_svg(
         else:
             body += render_symbol(pd.dev, pd.origin, mirror=pd.mirror)
 
-    nets = _collect_net_points(layout.placed)
-    rail_names = {"vdd", "vdd3", "0"}
-    all_junctions: set[Point] = set()
-    for net_name, points in nets.items():
-        if net_name in rail_names:
-            continue
-        unique: list[Point] = []
-        seen: set[tuple[int, int]] = set()
-        for p in points:
-            key = (p.x, p.y)
-            if key not in seen:
-                seen.add(key)
-                unique.append(p)
-        seg, junctions = _route_net(unique)
-        body += seg
-        if len(unique) >= 3:
-            all_junctions |= junctions
+    routed = route_nets(layout.placed)
+    body += segments_to_svg_lines(routed.segments, _WIRE_CLASS, _RAIL_CLASS)
+    all_junctions = routed.junctions
 
+    nets = _collect_net_points(layout.placed)
     body += _draw_rails(layout.placed, nets, layout.width, layout.height)
     body += _pin_labels(layout.placed, layout.topology, layout.width)
 

@@ -10,6 +10,7 @@ from openanalog.eda.schematic_connectivity import (
     parse_wire_segments,
     terminal_map,
     verify_schematic_connectivity,
+    verify_terminal_stubs,
 )
 from openanalog.eda.schematic_layout import build_schematic_layout, render_schematic_svg
 from openanalog.eda.symbols import terminal_positions
@@ -102,3 +103,23 @@ def test_netlist_pins_match_terminal_map(floorplan_case):
                 if (dev.name.upper(), node.lower()) in pins
             ]
             assert pts, f"{name}: {dev.name}.{node} has no placed terminal"
+
+
+def test_terminal_stub_collinear(floorplan_case):
+    """Phase 0.8: every terminal emits a stub before the first fold."""
+    name, result, devices = floorplan_case
+    layout = build_schematic_layout(devices, result)
+    svg = render_schematic_svg(devices, result)
+    errors = verify_terminal_stubs(layout.placed, svg)
+    assert not errors, f"{name} terminal stub errors:\n" + "\n".join(errors)
+
+
+def test_terminal_stub_check_fails_on_legacy_router(floorplan_case):
+    """Stub verifier must reject old centroid-star routes (no port stubs)."""
+    name, result, devices = floorplan_case
+    layout = build_schematic_layout(devices, result)
+    svg = render_schematic_svg(devices, result)
+    # Legacy SVG has no terminal-stub class lines.
+    legacy_svg = svg.replace(" terminal-stub", "")
+    errors = verify_terminal_stubs(layout.placed, legacy_svg)
+    assert errors, f"{name}: legacy router should fail stub check (got 0 errors)"
