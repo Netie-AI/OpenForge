@@ -13,7 +13,7 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
-from openanalog.sim.models import ResolvedModels, resolve_models
+from openanalog.sim.models import ResolvedModels, mos_line, resolve_models
 
 
 @dataclass
@@ -64,31 +64,35 @@ def _params_block(p: LDOParams, vin: float, vout_target: float, vref: float) -> 
 
 
 def _error_amp(ms: ResolvedModels) -> str:
-    return f"""
-Iref vdd nb {{IREF}}
-M8 nb nb 0 0 {ms.nmos} W={{Wb}} L={{Lb}}
-M5 tail nb 0 0 {ms.nmos} W={{W5}} L={{L5}}
-M7 vgate nb 0 0 {ms.nmos} W={{W7}} L={{L7}}
-M1 n1    vref  tail 0 {ms.nmos} W={{W1}} L={{L1}}
-M2 nout1 vfb   tail 0 {ms.nmos} W={{W1}} L={{L1}}
-M3 n1    n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
-M4 nout1 n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
-M6 vgate nout1 vdd vdd {ms.pmos} W={{W6}} L={{L6}}
-Cc vgate nout1 {{CC}}
-"""
+    lines = [
+        "Iref vdd nb {IREF}",
+        mos_line("8", "nb", "nb", "0", "0", "n", w="{Wb}", l="{Lb}", ms=ms),
+        mos_line("5", "tail", "nb", "0", "0", "n", w="{W5}", l="{L5}", ms=ms),
+        mos_line("7", "vgate", "nb", "0", "0", "n", w="{W7}", l="{L7}", ms=ms),
+        mos_line("1", "n1", "vref", "tail", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        mos_line("2", "nout1", "vfb", "tail", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        mos_line("3", "n1", "n1", "vdd", "vdd", "p", w="{W3}", l="{L3}", ms=ms),
+        mos_line("4", "nout1", "n1", "vdd", "vdd", "p", w="{W3}", l="{L3}", ms=ms),
+        mos_line("6", "vgate", "nout1", "vdd", "vdd", "p", w="{W6}", l="{L6}", ms=ms),
+        "Cc vgate nout1 {CC}",
+    ]
+    return "\n" + "\n".join(lines) + "\n"
 
 
 def _core(ms: ResolvedModels) -> str:
-    return f"""
-Vin vin 0 {{VIN}}
-Vdd vdd 0 {{VIN}}
-Vref vref 0 {{VREF}}
-R1 vout vfb {{R1}}
-R2 vfb 0 {{R2}}
-Mp vout vgate vin vin {ms.pmos} W={{WP}} L={{LP}}
-Iload vout 0 DC {{ILOAD}}
+    head = """
+Vin vin 0 {VIN}
+Vdd vdd 0 {VIN}
+Vref vref 0 {VREF}
+R1 vout vfb {R1}
+R2 vfb 0 {R2}
+"""
+    pass_dev = mos_line("p", "vout", "vgate", "vin", "vin", "p", w="{WP}", l="{LP}", ms=ms)
+    tail = """
+Iload vout 0 DC {ILOAD}
 Cout vout 0 1u
-""" + _error_amp(ms)
+"""
+    return head + pass_dev + "\n" + tail + _error_amp(ms)
 
 
 def _build_dc_deck(p: LDOParams, vin: float, vout_target: float) -> str:

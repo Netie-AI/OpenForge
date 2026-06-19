@@ -13,7 +13,7 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
-from openanalog.sim.models import ResolvedModels, resolve_models
+from openanalog.sim.models import ResolvedModels, mos_line, resolve_models
 
 
 @dataclass
@@ -48,22 +48,21 @@ def _params_block(p: MultiplierParams, supply_V: float) -> str:
 
 def _core(ms: ResolvedModels) -> str:
     """Standard cross-coupled Gilbert quad with differential X and single-ended Y."""
-    return f"""
-VSUP vdd 0 {{VDD}}
-Ib vdd nb {{IREF}}
-Mb nb nb 0 0 {ms.nmos} W={{Wb}} L={{Lb}}
-Mtail tail nb 0 0 {ms.nmos} W={{WTAIL}} L={{LTAIL}}
-* Y input steers tail1/tail2
-My1 tail1 vy tail 0 {ms.nmos} W={{W2}} L={{L2}}
-My2 tail2 vyn tail 0 {ms.nmos} W={{W2}} L={{L2}}
-* Cross-coupled multiplier core (vxp/vxn differential X)
-Mx1 outp vxp tail1 0 {ms.nmos} W={{W1}} L={{L1}}
-Mx2 outn vxp tail2 0 {ms.nmos} W={{W1}} L={{L1}}
-Mx3 outp vxn tail2 0 {ms.nmos} W={{W1}} L={{L1}}
-Mx4 outn vxn tail1 0 {ms.nmos} W={{W1}} L={{L1}}
-Rlp outp vdd {{RLOAD}}
-Rln outn vdd {{RLOAD}}
-"""
+    lines = [
+        "VSUP vdd 0 {VDD}",
+        "Ib vdd nb {IREF}",
+        mos_line("b", "nb", "nb", "0", "0", "n", w="{Wb}", l="{Lb}", ms=ms),
+        mos_line("tail", "tail", "nb", "0", "0", "n", w="{WTAIL}", l="{LTAIL}", ms=ms),
+        mos_line("y1", "tail1", "vy", "tail", "0", "n", w="{W2}", l="{L2}", ms=ms),
+        mos_line("y2", "tail2", "vyn", "tail", "0", "n", w="{W2}", l="{L2}", ms=ms),
+        mos_line("x1", "outp", "vxp", "tail1", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        mos_line("x2", "outn", "vxp", "tail2", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        mos_line("x3", "outp", "vxn", "tail2", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        mos_line("x4", "outn", "vxn", "tail1", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        "Rlp outp vdd {RLOAD}",
+        "Rln outn vdd {RLOAD}",
+    ]
+    return "\n" + "\n".join(lines) + "\n"
 
 
 def _input_harness(*, vxp: str, vxn: str, vy: str, vyn: str) -> str:

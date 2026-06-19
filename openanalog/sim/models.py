@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextvars
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,6 +62,7 @@ class ResolvedModels:
     pmos: str
     npn: str
     pnp: str
+    mos_subckt: bool = False
 
 
 def set_active_model_set(name: str) -> None:
@@ -105,21 +107,40 @@ def _load_fetched_sky130_block() -> str | None:
     return rewritten
 
 
-def sky130_models_block() -> str:
-    """Return ngspice-compatible SKY130 cards (fetched subckts need full open_pdks)."""
+def _sky130_card_flavor(card: str | None = None) -> str:
+    if card:
+        return card.lower()
+    return os.getenv("OPENFORGE_SKY130_CARD", "level1").lower()
+
+
+def sky130_models_block(*, card: str | None = None) -> str:
+    """Return ngspice-compatible SKY130 cards.
+
+    level1 — calibrated level-1 (default, Phase 1/2 CI)
+    bsim   — fetched BSIM4 subckts from data/pdk/sky130/models.sp
+    """
+    flavor = _sky130_card_flavor(card)
+    if flavor == "bsim":
+        fetched = _load_fetched_sky130_block()
+        if fetched:
+            return fetched
     return SKY130_MODELS_BUILTIN
 
 
 def resolve_models(model_set: str | None = None) -> ResolvedModels:
     ms = (model_set or active_model_set() or MODEL_SET).lower()
     if ms == "sky130":
+        card = _sky130_card_flavor()
+        block = sky130_models_block(card=card)
+        use_subckt = card == "bsim" and block != SKY130_MODELS_BUILTIN
         return ResolvedModels(
             model_set="sky130",
-            block=sky130_models_block(),
+            block=block,
             nmos=SKY130_NMOS,
             pmos=SKY130_PMOS,
             npn=SKY130_NPN,
             pnp=SKY130_PNP,
+            mos_subckt=use_subckt,
         )
     return ResolvedModels(
         model_set="bundled",
@@ -128,6 +149,7 @@ def resolve_models(model_set: str | None = None) -> ResolvedModels:
         pmos=PMOS,
         npn="npn_ana",
         pnp="pnp_ana",
+        mos_subckt=False,
     )
 
 
@@ -143,10 +165,29 @@ def mos_line(
     l: str,
     ms: ResolvedModels | None = None,
 ) -> str:
-    """Emit MOS instance (M=.model for bundled and ngspice-tuned SKY130)."""
+    """Emit MOS instance (M=model for level-1; X=subckt for fetched SKY130 BSIM4)."""
     r = ms or resolve_models()
     model = r.nmos if polarity == "n" else r.pmos
+    if r.mos_subckt:
+        return f"X{name} {drain} {gate} {source} {bulk} {model} w={w} l={l}"
     return f"M{name} {drain} {gate} {source} {bulk} {model} W={w} L={l}"
+
+
+def mos_inst(
+    ms: ResolvedModels,
+    inst: str,
+    drain: str,
+    gate: str,
+    source: str,
+    bulk: str,
+    polarity: str,
+    *,
+    w: str,
+    l: str,
+) -> str:
+    """Like ``mos_line`` but accepts schematic-style instance labels (e.g. ``M8``)."""
+    dev = inst.lstrip("MmXx") or inst
+    return mos_line(dev, drain, gate, source, bulk, polarity, w=w, l=l, ms=ms)
 
 
 def models_available() -> dict[str, bool]:

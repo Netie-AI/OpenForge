@@ -43,6 +43,8 @@ OPENFORGE_SEA_LION_MODEL = os.getenv("OPENFORGE_SEA_LION_MODEL", "aisingapore/Ll
 
 # PDK model set: bundled (fast/dev) | sky130 (silicon-plausible)
 MODEL_SET = os.getenv("OPENFORGE_MODEL_SET", "bundled").lower()
+# SKY130 card flavor when MODEL_SET=sky130: level1 (fast calibrated) | bsim (fetched BSIM4 subckts)
+SKY130_CARD = os.getenv("OPENFORGE_SKY130_CARD", "level1").lower()
 PDK_DIR = DATA_DIR / "pdk" / "sky130"
 
 NGSPICE_TIMEOUT = int(os.getenv("NGSPICE_TIMEOUT", "30"))

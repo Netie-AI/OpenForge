@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from openanalog.forge.blocks.base import BlockMeta, BlockResult
-from openanalog.sim.models import ResolvedModels
+from openanalog.sim.models import ResolvedModels, mos_inst
 
 
 def emit(
@@ -20,8 +20,14 @@ def emit(
     inst_n: str = "M2",
 ) -> BlockResult:
     lines = [
-        f"{inst_p} {out_p}    {vinp} {tail} 0 {ms.nmos} W={{{w_param}}} L={{{l_param}}}",
-        f"{inst_n} {out_n} {vinn} {tail} 0 {ms.nmos} W={{{w_param}}} L={{{l_param}}}",
+        mos_inst(
+            ms, inst_p, out_p, vinp, tail, "0", "n",
+            w=f"{{{w_param}}}", l=f"{{{l_param}}}",
+        ),
+        mos_inst(
+            ms, inst_n, out_n, vinn, tail, "0", "n",
+            w=f"{{{w_param}}}", l=f"{{{l_param}}}",
+        ),
     ]
     return BlockResult(
         lines=lines,

@@ -13,7 +13,7 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
-from openanalog.sim.models import ResolvedModels, resolve_models
+from openanalog.sim.models import ResolvedModels, mos_line, resolve_models
 
 
 @dataclass
@@ -38,20 +38,21 @@ class OpAmpParams:
 
 
 def _core(ms: ResolvedModels) -> str:
-    return f"""
-VSUP vdd 0 {{VDD}}
-Iref vdd nb {{IREF}}
-M8 nb nb 0 0 {ms.nmos} W={{Wb}} L={{Lb}}
-M5 tail nb 0 0 {ms.nmos} W={{W5}} L={{L5}}
-M7 vout nb 0 0 {ms.nmos} W={{W7}} L={{L7}}
-M1 n1    vinp tail 0 {ms.nmos} W={{W1}} L={{L1}}
-M2 nout1 vinn tail 0 {ms.nmos} W={{W1}} L={{L1}}
-M3 n1    n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
-M4 nout1 n1 vdd vdd {ms.pmos} W={{W3}} L={{L3}}
-M6 vout nout1 vdd vdd {ms.pmos} W={{W6}} L={{L6}}
-Cc vout nout1 {{CC}}
-CL vout 0 {{CLOAD}}
-"""
+    lines = [
+        "VSUP vdd 0 {VDD}",
+        "Iref vdd nb {IREF}",
+        mos_line("8", "nb", "nb", "0", "0", "n", w="{Wb}", l="{Lb}", ms=ms),
+        mos_line("5", "tail", "nb", "0", "0", "n", w="{W5}", l="{L5}", ms=ms),
+        mos_line("7", "vout", "nb", "0", "0", "n", w="{W7}", l="{L7}", ms=ms),
+        mos_line("1", "n1", "vinp", "tail", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        mos_line("2", "nout1", "vinn", "tail", "0", "n", w="{W1}", l="{L1}", ms=ms),
+        mos_line("3", "n1", "n1", "vdd", "vdd", "p", w="{W3}", l="{L3}", ms=ms),
+        mos_line("4", "nout1", "n1", "vdd", "vdd", "p", w="{W3}", l="{L3}", ms=ms),
+        mos_line("6", "vout", "nout1", "vdd", "vdd", "p", w="{W6}", l="{L6}", ms=ms),
+        "Cc vout nout1 {CC}",
+        "CL vout 0 {CLOAD}",
+    ]
+    return "\n" + "\n".join(lines) + "\n"
 
 
 def _params_block(p: OpAmpParams, supply_V: float, cload_F: float) -> str:
