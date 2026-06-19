@@ -303,13 +303,44 @@ Before accepting a change, check:
 
 When working in this repo:
 
+### Documentation hierarchy (master handoff anchor)
+
+Read in order at session start: **`docs/HANDOFF.md`** → **`docs/STATUS.md`** → **`AGENT_PLAN.md` §0**.
+
+| File | Purpose |
+|------|---------|
+| `docs/HANDOFF.md` | **Master handoff** — short-term next tasks + long-term north star + copy-paste next-window prompt |
+| `docs/STATUS.md` | Evidence tables per phase (what is proven working/broken) |
+| `AGENT_PLAN.md` | Phase gates and the verify → check → improve loop |
+
+Update **`docs/HANDOFF.md` at every meaningful checkpoint** (fix landed, phase gate changed, priority shift) — not only when closing a session.
+
+Each HANDOFF update must keep both goal horizons explicit:
+
+```markdown
+## North star (long term)
+<multi-phase roadmap target — unchanged unless strategy shifts>
+
+## Short term (do next)
+| Priority | Task | Gate |
+| **Now** | <single concrete next action> | <exit criterion> |
+```
+
+Do not bury short/long-term goals only in chat or commit messages; the master handoff file is the continuity anchor across Cursor windows.
+
+### Phase and evidence rules
+
 - Read `docs/STATUS.md` before writing phase updates; keep milestone language aligned with evidence logs under `evidence/`.
-- Treat `docs/HANDOFF.md` as the master handoff anchor and update it at every meaningful checkpoint (not just at session end).
-- Every handoff update must separate **short-term goal** (current phase exit gate / next concrete task) from **long-term goal** (multi-phase roadmap target) so priorities stay explicit.
 - For SKY130 work, always distinguish placeholder level-1 cards from fetched BSIM models and state which path was exercised.
 - For seed claims, report both the gated smoke seed result and any sweep robustness count, and reconcile them in one sentence.
 - For advanced-node/PDK discussions, verify upstream README/docs directly and separate three facts: supported node list, license, and whether the artifact is usable for analog SPICE design.
 - Prefer reproducible commands in docs (`make smoke-wsl`, `python scripts/verify_phase*.py`) and do not mark CI coverage for flows that the workflow does not run.
+
+### What this repo does *not* automate (yet)
+
+- **No Cursor hooks** (`.cursor/hooks.json`) — no auto sessionStart/stop loop or post-response handoff writer.
+- **No agent eval loop** — `.cursor/.skills/skill-creator.md` describes Anthropic skill benchmarking; it is reference only, not wired to OpenForge runs.
+- **Thinking/looping in product** = manual: follow `AGENT_PLAN.md` verify/check/improve + update HANDOFF/STATUS by hand after each gate.
 
 ## When evidence is missing
 

@@ -49,7 +49,8 @@ data/pdk/
 models/openforge-lora-v1/
 openforge-lora-v1/
 cuda_*.run
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 *.kicad_sch
 data/seeds_normalized.jsonl.bak
 data/seeds_normalized.renorm.jsonl

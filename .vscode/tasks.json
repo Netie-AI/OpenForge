@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Copy Cursor Chat",
+      "type": "process",
+      "command": "uv",
+      "args": ["run", "python", "scripts/copy_cursor_chat.py"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "close": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Copy Cursor Chat (full transcript)",
+      "type": "process",
+      "command": "uv",
+      "args": ["run", "python", "scripts/copy_cursor_chat.py", "--all"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "close": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

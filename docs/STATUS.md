@@ -2,6 +2,18 @@
 
 Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes.py`.
 
+## Documentation anchor (read order)
+
+| File | Role | Update when |
+|------|------|-------------|
+| **`docs/HANDOFF.md`** | **Master handoff** — short-term goal, long-term north star, next-window prompt | Every meaningful checkpoint (not only session end) |
+| **`docs/STATUS.md`** | Evidence-backed phase/category status (this file) | After a verified run changes a phase gate |
+| **`AGENT_PLAN.md`** | Phase order, exit criteria, verify/check/improve loop | When roadmap gates or rules change |
+| **`.cursor/.skills/SKILL.md`** | Cursor agent conventions (evidence, handoff discipline) | When workflow rules change |
+
+**Short-term vs long-term:** `HANDOFF.md` owns both — "Short term (do next)" table and "North star (long term)". `STATUS.md` does not duplicate goals; it records what is proven true/false per phase.
+
+---
 ## Phase 1a — Comparator / RS8901 (2026-06-18)
 
 | Item | Status | Notes |

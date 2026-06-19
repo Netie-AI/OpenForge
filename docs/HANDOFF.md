@@ -1,9 +1,11 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-19 (end of session)  
-**HEAD:** Phase 1 closed, Phase 2 closed, **Phase 3 in progress** — BSIM 5/5 smoke on pinned v0.13.0 (local only, no CI).
+**Updated:** 2026-06-19 (session)  
+**HEAD:** `8ebcc50` — Phase 3 BSIM local green; conventions doc; pending push of copy-chat + doc-anchor work.
 
-Use this file at the **start of every new Cursor window**. Read it, then `docs/STATUS.md`, then `AGENT_PLAN.md` §0 operating rules.
+**Read order:** this file → `docs/STATUS.md` → `AGENT_PLAN.md` §0 → `.cursor/.skills/SKILL.md` (Cursor conventions).
+
+Use this file at the **start of every new Cursor window**.
 
 ---
 
@@ -24,8 +26,11 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | **Now** | Phase 3 exit | vref on SKY130 BJTs + BSIM CI job (after local stability) |
 | Done | Switch Ron BSIM seed sweep | 5/5 pass — `scripts/verify_phase3_switch_bsim_seeds.py` |
 | Done | Pin SKY130 models | `v0.13.0` / `2997061e…` in fetch script + `PIN.txt` |
-| Done | Opamp AOL on BSIM | 5/5 smoke; seed=42 gate; 3/5 seed sweep |
+| Done | Opamp AOL on BSIM | 5/5 smoke; seed=42 gate; 3/5 seed sweep (reconciled in STATUS) |
+| Done | Copy Cursor chat | `scripts/copy_cursor_chat.py` + task **Copy Cursor Chat** (`Ctrl+Shift+Alt+C` in user keybindings) |
+| Done | Cursor conventions doc | `.cursor/.skills/SKILL.md` — evidence gatekeeper; not an Anthropic Skill |
 | Not yet | Phase 4 / Phase 5 | Do **not** start until Phase 3 exit |
+| Deferred | Advanced-node PDK survey | Research doc only (`docs/research/ADVANCED_NODE_SURVEY.md`) — after Phase 3 close; lambdapdk/ASAP7 not analog SPICE |
 
 ---
 
