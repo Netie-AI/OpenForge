@@ -1,8 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (post-commit handoff)  
-**HEAD (local):** commit pending this session — vref real amp, verify gate fix, UI hotfix, docs  
-**Uncommitted:** should be clean after commit below
+**Updated:** 2026-06-20  
+**HEAD (local):** `d48da02` — Phase 3 vref real amp + verify gate fix + session handoff docs
 
 **Structural log:** `docs/semicon-log.md` entry 2 — real diff-pair amp in vref loop; topology validated, **iq open**.
 
