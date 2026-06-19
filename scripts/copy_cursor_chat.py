@@ -1,7 +1,8 @@
-"""Copy the latest Cursor agent reply to the clipboard.
+"""Copy the latest substantial Cursor agent reply to the clipboard.
 
-Default: the most recent assistant message only (one turn — avoids re-pasting
-full transcript history). Use --all for the full chat export.
+Default: the most recent assistant message with enough body text to be useful
+(skips brief auto follow-ups like task-notification acks). Use --latest-only
+for the single last bubble, or --all for the full chat export.
 
 The VS Code task runs with cwd = workspace root, so --workspace is optional
 (Path.cwd()) and the task never passes a spaced path through the shell.
@@ -9,6 +10,7 @@ The VS Code task runs with cwd = workspace root, so --workspace is optional
 Usage:
   uv run python scripts/copy_cursor_chat.py
   uv run python scripts/copy_cursor_chat.py --dry-run
+  uv run python scripts/copy_cursor_chat.py --latest-only
   uv run python scripts/copy_cursor_chat.py --all
   uv run python scripts/copy_cursor_chat.py --list
   uv run python scripts/copy_cursor_chat.py --id <uuid>
@@ -133,6 +135,35 @@ def _format_latest_assistant(path: Path, *, include_tools: bool) -> str | None:
     return None
 
 
+def _assistant_bodies_newest_first(path: Path, *, include_tools: bool) -> list[str]:
+    bodies: list[str] = []
+    for record in reversed(_load_records(path)):
+        if record.get("role") != "assistant":
+            continue
+        body = _extract_message_text(record, include_tools=include_tools)
+        if body:
+            bodies.append(body)
+    return bodies
+
+
+def _format_substantial_assistant(
+    path: Path,
+    *,
+    include_tools: bool,
+    min_chars: int,
+) -> str | None:
+    """Latest assistant message; skip trailing short acks if a longer one is nearby."""
+    bodies = _assistant_bodies_newest_first(path, include_tools=include_tools)
+    if not bodies:
+        return None
+    if len(bodies[0]) >= min_chars:
+        return bodies[0] + "\n"
+    for body in bodies[1:10]:
+        if len(body) >= min_chars:
+            return body + "\n"
+    return bodies[0] + "\n"
+
+
 def _format_full_transcript(path: Path, *, include_tools: bool) -> str:
     sections: list[str] = []
     for record in _load_records(path):
@@ -182,7 +213,7 @@ def _configure_stdout_utf8() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Copy latest Cursor assistant reply (default) or full chat.",
+        description="Copy latest substantial Cursor assistant reply (default) or full chat.",
     )
     parser.add_argument(
         "--workspace",
@@ -202,7 +233,18 @@ def main() -> int:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Copy the full transcript instead of the latest assistant message.",
+        help="Copy the full transcript instead of the latest substantial assistant message.",
+    )
+    parser.add_argument(
+        "--latest-only",
+        action="store_true",
+        help="Copy only the single last assistant bubble (may be a short follow-up).",
+    )
+    parser.add_argument(
+        "--min-chars",
+        type=int,
+        default=500,
+        help="Default export skips trailing assistant replies shorter than this (default: 500).",
     )
     parser.add_argument(
         "--include-tools",
@@ -238,12 +280,25 @@ def main() -> int:
 
     if args.all:
         export = _format_full_transcript(path, include_tools=args.include_tools)
-    else:
+        mode = "full chat"
+    elif args.latest_only:
         latest = _format_latest_assistant(path, include_tools=args.include_tools)
         if latest is None:
             print(f"No assistant message found in {path}", file=sys.stderr)
             return 1
         export = latest
+        mode = "latest bubble"
+    else:
+        latest = _format_substantial_assistant(
+            path,
+            include_tools=args.include_tools,
+            min_chars=args.min_chars,
+        )
+        if latest is None:
+            print(f"No assistant message found in {path}", file=sys.stderr)
+            return 1
+        export = latest
+        mode = "substantial reply"
 
     if args.dry_run:
         _configure_stdout_utf8()
@@ -251,7 +306,6 @@ def main() -> int:
         return 0
 
     _copy_to_clipboard(export)
-    mode = "full chat" if args.all else "latest reply"
     print(f"Copied {mode} from {path.parent.name} ({len(export)} chars) to clipboard.")
     return 0
 
