@@ -1,9 +1,12 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-19 (session)  
-**HEAD:** `a9fba7f` — copy-chat task + doc anchor hierarchy pushed.
+**Updated:** 2026-06-20 (post-commit handoff)  
+**HEAD (local):** commit pending this session — vref real amp, verify gate fix, UI hotfix, docs  
+**Uncommitted:** should be clean after commit below
 
-**Read order:** this file → `docs/STATUS.md` → `AGENT_PLAN.md` §0 → `.cursor/.skills/SKILL.md` (Cursor conventions).
+**Structural log:** `docs/semicon-log.md` entry 2 — real diff-pair amp in vref loop; topology validated, **iq open**.
+
+**Read order:** this file → `docs/STATUS.md` → `docs/PARKING_LOT.md` → `AGENT_PLAN.md` §0 → `.cursor/.skills/SKILL.md`
 
 Use this file at the **start of every new Cursor window**.
 
@@ -23,14 +26,47 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **Now** | Phase 3 exit | vref on SKY130 BJTs + BSIM CI job (after local stability) |
-| Done | Switch Ron BSIM seed sweep | 5/5 pass — `scripts/verify_phase3_switch_bsim_seeds.py` |
-| Done | Pin SKY130 models | `v0.13.0` / `2997061e…` in fetch script + `PIN.txt` |
-| Done | Opamp AOL on BSIM | 5/5 smoke; seed=42 gate; 3/5 seed sweep (reconciled in STATUS) |
-| Done | Copy Cursor chat | `scripts/copy_cursor_chat.py` + task **Copy Cursor Chat** (`Ctrl+Shift+Alt+C` in user keybindings) |
-| Done | Cursor conventions doc | `.cursor/.skills/SKILL.md` — evidence gatekeeper; not an Anthropic Skill |
-| Not yet | Phase 4 / Phase 5 | Do **not** start until Phase 3 exit |
-| Deferred | Advanced-node PDK survey | Research doc only (`docs/research/ADVANCED_NODE_SURVEY.md`) — after Phase 3 close; lambdapdk/ASAP7 not analog SPICE |
+| **1** | **UI E2E browser check** | Agent 2026-06-20: op-amp Design Chip PASS on fresh server (`065abb0`). Human should tick `docs/UI_E2E_CHECKLIST.md`; footer git hash DOM bug remains. |
+| **2** | **Phase 3 vref topology decision** | Verify gate restored (`verify_phase3_vref.py` exit 1 = honest iq fail). **Decision:** lower mirror/BJT bias architecture vs documented honest-partial on placeholder BJTs — see § vref engineering brief below. **Not** more sizing seeds. |
+| **3** | **Phase 0.8 schematic sign-off** | Code landed (`50da5f5`, `schematic_router.py`); run `pytest tests/test_schematic_connectivity.py -v`; compare `logs/schematic_0.8_*.svg` vs 0.7; update STATUS 0.8 row if evidence clean |
+| **4** | **BSIM CI job** | After vref local stable — GitHub Actions still bundled-only for SKY130 (`STATUS.md`) |
+| Parking lot | Everything else | `docs/PARKING_LOT.md` — PSRR/CMRR/THD, PVT/MC, layout/PEX; **one session each** |
+
+**Do NOT start:** Phase 4/5, LoRA, cross-repo Cursor brain, layout/DRC/LVS, PLL/SerDes/standard-cells/high-speed IO (`PARKING_LOT.md` § out of scope).
+
+### Phase 3 vref — engineering brief (open gate)
+
+**Evidence (2026-06-20):** `scripts/diag_vref_iq_breakdown.py` + `scripts/verify_phase3_vref.py` (end-to-end; exit 1 on iq is honest fail).
+
+| Run | iq µA | vref V | line_reg mV |
+|-----|-------|--------|-------------|
+| defaults | 203.8 | 1.146 | 1.30 |
+| manual amp floor (`iref_amp=1 µA`) | **166.0** | 1.152 | 0.69 |
+| sized (seed=42, budget=80) | 138.5 | 1.196 | 1.25 |
+
+**Verdict:** iq **not closable by sizing alone** — PMOS mirror + BJT stack dominate. Dead sizer knob `ibias_uA` removed (was in `param_ranges` but unwired).
+
+**Decision (pick one before more iq work):**
+
+| Option | Action | When to choose |
+|--------|--------|----------------|
+| **A — Architecture change** | Redesign bias path (shared tail, lower mirror current, loop-gain tradeoff) | RS431 `<100 µA` bar stays the gate |
+| **B — Honest partial** | STATUS: topology proven, iq open on placeholder BJTs | Defer iq until real BJT cards + architecture pass |
+
+**After decision:** PVT/testbench (PSRR/CMRR/THD) first new capability. Schematic drag-reroute **after** vref, not interleaved.
+
+### Recently done (this session chain)
+
+| Item | Notes |
+|------|-------|
+| 0.7 connectivity + IO stubs | Verifier caught 16px gap; tests 10/10 |
+| 0.8 stub-then-fold (code) | `schematic_router.py` on HEAD `065abb0`; STATUS sign-off pending |
+| UI hotfix | `renderError()` restored after JS corruption |
+| Docs | `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `SESSION_NOTES.md`, etc. |
+| VCVS → real error amp | vref topology validated; **iq still open** |
+| Opamp/switch BSIM (local) | 5/5 smoke; CI gap remains |
+| Agentic EDA survey | `docs/research/AGENTIC_EDA_SURVEY.md` |
+| Cursor conventions | `.cursor/.skills/SKILL.md` |
 
 ---
 
@@ -44,6 +80,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | 0.5 rendering | ✅ |
 | 0.6 schematic floorplan | ✅ |
 | 0.7 connectivity verification | ✅ |
+| 0.8 gate-stub-then-fold router | ✅ code on HEAD; STATUS sign-off pending |
 | CI on Linux + ngspice behavioral job | ✅ |
 
 ### Phase 1 — THE GATE (four dev-mode categories vs `spec_envelopes.py`)
@@ -68,9 +105,14 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 # Simulation venv (WSL)
 wsl -d Ubuntu bash -lc "cd /mnt/c/Users/oojia/OpenForge && source .venv_wsl/bin/activate && python scripts/verify_phase1c.py"
 
-# Web server (Windows; port 8080 often blocked — use 8090)
-$env:OPENFORGE_WSL_DISTRO='Ubuntu'
-.\.venv_train\Scripts\python.exe -m openanalog serve --host 127.0.0.1 --port 8090
+# Web server (Windows)
+cd C:\Users\oojia\OpenForge
+.venv\Scripts\Activate.ps1
+python -m openanalog.web
+# → http://127.0.0.1:8080  (added openanalog/web/__main__.py this session)
+
+# Alternate port if 8080 blocked
+python -m openanalog serve --host 127.0.0.1 --port 8090
 
 # Full smoke (WSL)
 make smoke-wsl
@@ -102,7 +144,87 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ---
 
-## Copy-paste prompt — next Cursor window (Phase 3 exit)
+## What this session closed vs left open
+
+### Closed (with evidence)
+- **0.7 verifier:** IO stubs must reach terminals; parser fix for `class="signal-wire io-stub"`; tests caught 16px gap then passed after fix.
+- **SVG emitter:** Valid CSS classes; dynamic IO stub coords; golden logs `logs/schematic_0.7_*.svg`.
+- **0.8 router (committed):** `terminal_stub()` + orthogonal routing — `logs/schematic_0.8_orthogonal_*.svg`; `verify_terminal_stubs` in connectivity tests.
+- **UI hotfix:** Restored `renderError()` after JS corruption; `node --check` on embedded script.
+- **Docs:** `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `analog_design_rules.md` (stub rule), `SESSION_NOTES.md`, `VERIFY_BRIEF.md`.
+
+### Open (real gates)
+- **Human UI E2E** — not verified in browser this session after hotfix.
+- **vref iq** — defaults ~204 µA, sized ~138 µA; target envelope still fails (`STATUS.md` Phase 3 vref row).
+- **BSIM in CI** — local 5/5 smoke; Actions still bundled-only.
+- **Uncommitted local diff** — web + docs may not match what next window sees on remote.
+
+### Discipline reminders
+- Passing connectivity tests ≠ schematic looks good ≠ UI loads.
+- UI churn caused a startup crash — always run `UI_E2E_CHECKLIST.md` after `index.html` edits.
+- Generic external roadmaps restate `AGENT_PLAN.md` — fold to parking lot, don’t panic-replan.
+
+---
+
+## Copy-paste — next **Cursor** window (executor)
+
+```
+Read first: docs/HANDOFF.md, docs/PARKING_LOT.md (Do next only), .cursor/.skills/SKILL.md
+
+You are the executor. Do NOT expand scope.
+
+Sequence:
+1. If UI not yet browser-checked: remind human to run docs/UI_E2E_CHECKLIST.md — do not claim UI done without it.
+2. Phase 3 vref iq — scripts/verify_phase3_vref.py (WSL), close iq + default vref margin, update docs/STATUS.md with numbers.
+3. If time: Phase 0.8 STATUS sign-off — pytest tests/test_schematic_connectivity.py -v, compare logs/schematic_0.8_*.svg vs 0.7, add 0.8 row to STATUS if clean.
+
+Do NOT: Phase 4/5, LoRA, layout/DRC/LVS, cross-repo Cursor skills, UI redesign.
+
+Evidence: paste command output, diff, or artifact paths. Zero-trust — no "trust me" summaries.
+
+Env: WSL Ubuntu + .venv_wsl for ngspice; Windows .venv for web (python -m openanalog.web).
+```
+
+---
+
+## Copy-paste — next **Claude** window (reviewer / gatekeeper)
+
+```
+Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md
+
+You are the reviewer, not the patch author. Gate acceptance on evidence.
+
+This session context:
+- 0.7 connectivity verified (IO stub gap was real; test failed then passed).
+- 0.8 stub-then-fold code on HEAD 065abb0; STATUS not yet updated.
+- UI index.html was corrupted and hotfixed — demand browser E2E or say "not verified."
+- vref iq still open (Phase 3) — real next engineering gate.
+- PARKING_LOT holds PSRR/CMRR/THD/PVT/layout — deferred, not forgotten.
+
+When Cursor returns work, check:
+1. Real ngspice numbers for vref iq (not _design() pass alone)
+2. git diff / pytest output / STATUS update consistency
+3. No scope creep into Phase 4+ or tooling mega-setup
+
+Push back on: restated roadmaps, "tests passed" without output, UI claims without browser check.
+```
+
+---
+
+## Key files touched recently
+
+| Area | Files |
+|------|-------|
+| Schematic 0.7/0.8 | `openanalog/eda/schematic_layout.py`, `schematic_router.py`, `schematic_connectivity.py`, `symbols.py` |
+| Tests | `tests/test_schematic_connectivity.py` |
+| Golden SVGs | `logs/schematic_0.7_*.svg`, `logs/schematic_0.8_orthogonal_*.svg` |
+| Web UI | `openanalog/web/index.html`, `app.py`, `__main__.py` |
+| Docs | `docs/PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `SESSION_NOTES.md`, `analog_design_rules.md`, `VERIFY_BRIEF.md` |
+| Phase 3 vref | `scripts/verify_phase3_vref.py`, `docs/semicon-log.md` |
+
+---
+
+## Copy-paste prompt — legacy (Phase 3 only)
 
 ```
 Read docs/HANDOFF.md and docs/STATUS.md first.

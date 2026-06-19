@@ -6,6 +6,10 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+# ngspice deck lines like `meas dc ...` falsely match [Mm]\w+ as a MOSFET name.
+_NGSPICE_CTRL_NAMES = frozenset(
+    {"meas", "let", "print", "set", "op", "dc", "tran", "ac", "noise", "fft", "end", "endc"}
+)
 _MOS_RE = re.compile(
     r"^\s*([Mm]\w+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)",
 )
@@ -36,7 +40,7 @@ def parse_spice_devices(netlist: str) -> list[SpiceDevice]:
         if not line or line.startswith(("*", ".")):
             continue
         m = _MOS_RE.match(line)
-        if m:
+        if m and m.group(1).lower() not in _NGSPICE_CTRL_NAMES:
             devices.append(
                 SpiceDevice(
                     name=m.group(1),

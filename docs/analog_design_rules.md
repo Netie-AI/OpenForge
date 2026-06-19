@@ -95,6 +95,27 @@ terminal anchor → terminal stub (collinear) → stub-end → Manhattan fold �
 ### Spec compliance
 - RS-series envelopes after ngspice (already in forge)
 
+### Future testbench targets (when benches exist)
+
+Not gaps — **named metrics to add to envelopes and compliance tables** when Phase 3+ categories need them. See `docs/PARKING_LOT.md` for sequencing.
+
+| Metric | What it guards | Typical bench |
+|--------|----------------|---------------|
+| **PSRR** | Supply noise coupling to output | AC ripple on `VDD`, measure `Vout` |
+| **CMRR** | Common-mode on diff inputs | CM step or AC on `VIN+`/`VIN−` |
+| **THD** | Nonlinearity / harmonic distortion | Large-signal sine, FFT or harmonic ratio |
+| **Line / load reg** | Regulator quality vs input/load | DC sweep (partial today on LDO/vref) |
+| **Tempco / drift** | Reference stability vs temperature | `.temp` sweep at `.op` or `.dc` |
+
+### PVT and mismatch (Phase 3–4+)
+
+- **Corners (TT/FF/SS/…):** require real corner decks on SKY130 BSIM — not bundled L1.
+- **Temperature:** envelope min/max °C on key specs.
+- **Monte Carlo:** param scatter for W/L/ΔVth; report yield to spec — after single-corner stable.
+- **Layout matching:** common-centroid, symmetry — **after layout exists**; schematic symmetry is necessary not sufficient.
+
+Do not conflate “textbook lists these” with “OpenForge hasn’t heard of them” — see **Already true** table in `docs/PARKING_LOT.md`.
+
 ---
 
 ## Rules by circuit class
