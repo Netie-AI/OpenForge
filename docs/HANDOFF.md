@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
 **Updated:** 2026-06-19 (session)  
-**HEAD:** `8ebcc50` — Phase 3 BSIM local green; conventions doc; pending push of copy-chat + doc-anchor work.
+**HEAD:** `a9fba7f` — copy-chat task + doc anchor hierarchy pushed.
 
 **Read order:** this file → `docs/STATUS.md` → `AGENT_PLAN.md` §0 → `.cursor/.skills/SKILL.md` (Cursor conventions).
 
