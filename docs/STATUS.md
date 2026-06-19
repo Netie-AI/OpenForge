@@ -143,6 +143,8 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 
 ## Phase 3 — SKY130 PDK (2026-06-19, in progress)
 
+**Zero-trust checkpoint:** evidence in `evidence/zerotrust_checkpoint_2026-06-19/` — **pending human review; Phase 3 hard-stopped until resolved.**
+
 | Item | Status | Notes |
 |------|--------|-------|
 | Config switch | ✅ | `OPENFORGE_MODEL_SET=bundled\|sky130`; `OPENFORGE_SKY130_CARD=level1\|bsim` |
