@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-19  
-**HEAD:** Phase 1 closed (`515e8a8` CI #16 green). **Phase 2 in progress** — seed corpus → `evaluate_forge_fitness`.
+**Updated:** 2026-06-19 (end of session)  
+**HEAD:** Phase 1 closed, Phase 2 closed, **Phase 3 in progress** — BSIM 5/5 smoke on pinned v0.13.0 (local only, no CI).
 
 Use this file at the **start of every new Cursor window**. Read it, then `docs/STATUS.md`, then `AGENT_PLAN.md` §0 operating rules.
 
@@ -21,10 +21,11 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **Now** | **Phase 2** — seed parser → forge | Wire `seeds_normalized.jsonl` (768/1010 sim-validated) via `seed_scoring.py` + forge `--score-seeds` |
-| Then | Phase 2 exit verification | `python scripts/verify_phase2.py` + unit tests green |
-| Not yet | Phase 3 SKY130 re-validation | After Phase 2 exit |
-| Not yet | Phase 5 LoRA / training | Do **not** wire until Phase 1–4 gates pass |
+| **Now** | Phase 3 exit | vref on SKY130 BJTs + BSIM CI job (after local stability) |
+| Done | Switch Ron BSIM seed sweep | 5/5 pass — `scripts/verify_phase3_switch_bsim_seeds.py` |
+| Done | Pin SKY130 models | `v0.13.0` / `2997061e…` in fetch script + `PIN.txt` |
+| Done | Opamp AOL on BSIM | 5/5 smoke; seed=42 gate; 3/5 seed sweep |
+| Not yet | Phase 4 / Phase 5 | Do **not** start until Phase 3 exit |
 
 ---
 
@@ -96,18 +97,17 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ---
 
-## Copy-paste prompt — next Cursor window (Phase 2 exit)
+## Copy-paste prompt — next Cursor window (Phase 3 exit)
 
 ```
 Read docs/HANDOFF.md and docs/STATUS.md first.
 
-Phase 1 THE GATE is closed (1a–1d, CI #16 green on 515e8a8).
-Phase 2 wiring started: openanalog/forge/seed_scoring.py + forge --score-seeds.
+Phase 1–2 closed. Phase 3: BSIM 5/5 smoke on pinned v0.13.0 (local only).
+Evidence: evidence/phase3_*_2026-06-19.log
 
-Verify: python scripts/verify_phase2.py (WSL) + pytest tests/test_seed_fitness.py
-Push when green; check Actions tab.
-
-Do NOT start Phase 5 LoRA training.
+Next: vref bandgap on SKY130 BJTs; then BSIM CI job (not before local stable).
+Do NOT start Phase 4/5 or LoRA training.
+Zero-trust: done = real artifacts checked, not summaries.
 Environment: WSL Ubuntu, .venv_wsl, OPENFORGE_WSL_DISTRO=Ubuntu.
 ```
 

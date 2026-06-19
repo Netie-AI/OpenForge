@@ -1,0 +1,18 @@
+volare --version
+(exit code: command not found — volare NOT INSTALLED on this host, Windows PowerShell PATH)
+
+data/pdk/sky130/PIN.txt:
+repo=https://raw.githubusercontent.com/google/skywater-pdk-libs-sky130_fd_pr
+commit=main
+output=models.sp
+
+scripts/fetch_sky130_models.py:
+SKY130_REPO = "https://raw.githubusercontent.com/google/skywater-pdk-libs-sky130_fd_pr"
+SKY130_COMMIT = "main"
+
+openanalog/sim/models.py:
+SKY130_PIN = "sky130_fd_pr v0.13.0"
+(note: SKY130_PIN is a string label in code; it is NOT a git commit hash and is NOT used to fetch model files)
+
+Current state: UNPINNED — fetch script tracks branch "main" on skywater-pdk-libs-sky130_fd_pr.
+volare is not installed; no volare-managed PDK directory exists on this machine.

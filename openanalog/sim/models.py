@@ -9,8 +9,9 @@ from pathlib import Path
 
 from openanalog.config import MODEL_SET, PDK_DIR
 
-# Pinned SKY130 model card version (update when re-fetching)
+# Pinned SKY130 model card version (update when re-fetching via fetch_sky130_models.py)
 SKY130_PIN = "sky130_fd_pr v0.13.0"
+SKY130_COMMIT = "2997061e461c71e6e5c85153e3403ca74c62f69c"
 
 BUNDLED_MODELS = """* openforge bundled models
 .model nmos_ana nmos (level=1 vto=0.7 kp=120u gamma=0.45 phi=0.8 lambda=0.02
@@ -38,7 +39,7 @@ SKY130_PMOS = "sky130_fd_pr__pfet_01v8"
 SKY130_NPN = "sky130_fd_pr__npn_11v0"
 SKY130_PNP = "sky130_fd_pr__pnp_11v0"
 
-SKY130_PFET_GLOBAL_DEFAULTS = """
+SKY130_BSIM_GLOBAL_DEFAULTS = """
 .param sky130_fd_pr__pfet_01v8__wlod_diff=0
 .param sky130_fd_pr__pfet_01v8__kvth0_diff=0
 .param sky130_fd_pr__pfet_01v8__lkvth0_diff=0
@@ -47,6 +48,18 @@ SKY130_PFET_GLOBAL_DEFAULTS = """
 .param sky130_fd_pr__pfet_01v8__lku0_diff=0
 .param sky130_fd_pr__pfet_01v8__wku0_diff=0
 .param sky130_fd_pr__pfet_01v8__kvsat_diff=0
+.param sky130_fd_pr__nfet_01v8__toxe_slope=0
+.param sky130_fd_pr__nfet_01v8__vth0_slope=0
+.param sky130_fd_pr__nfet_01v8__vth0_slope1=0
+.param sky130_fd_pr__nfet_01v8__voff_slope=0
+.param sky130_fd_pr__pfet_01v8__toxe_slope=0
+.param sky130_fd_pr__pfet_01v8__toxe_slope1=0
+.param sky130_fd_pr__pfet_01v8__vth0_slope=0
+.param sky130_fd_pr__pfet_01v8__vth0_slope1=0
+.param sky130_fd_pr__pfet_01v8__voff_slope=0
+.param sky130_fd_pr__pfet_01v8__voff_slope1=0
+.param sky130_fd_pr__pfet_01v8__nfactor_slope=0
+.param sky130_fd_pr__pfet_01v8__nfactor_slope1=0
 """
 
 _model_set_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -93,7 +106,7 @@ def _load_fetched_sky130_block() -> str | None:
         return line
 
     lines = [_rewrite_include(ln) for ln in text.splitlines()]
-    rewritten = SKY130_PFET_GLOBAL_DEFAULTS + "\n" + "\n".join(lines)
+    rewritten = SKY130_BSIM_GLOBAL_DEFAULTS.strip() + "\n\n" + "\n".join(lines)
     # Use fetched cards when pm3 includes resolve; else builtin minimal set
     if '.include "' in rewritten.lower():
         missing = [
@@ -104,7 +117,7 @@ def _load_fetched_sky130_block() -> str | None:
         ]
         if missing:
             return None
-    return rewritten
+    return rewritten.rstrip() + "\n\n"
 
 
 def _sky130_card_flavor(card: str | None = None) -> str:

@@ -1,0 +1,9 @@
+command: OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=level1 python scripts/smoke_all.py 80
+capture: stdout+stderr of smoke_all.py only — see sky130_level1_smoke_raw.log
+
+ngspice stdout (Gap 1 — filled 2026-06-19):
+  script: scripts/_zerotrust_level1_ngspice_capture.py
+  artifact: sky130_level1_ngspice_stdout.txt
+  category: opamp (default params), AC + TRAN decks
+  result: run_ngspice ok=True for both decks; real ngspice console output (isupp, aol_db, gbw_hz, ph_*, tr_rise, node voltages)
+  caveat: tests hand-written SKY130_MODELS_BUILTIN placeholder — NOT real skywater-pdk SKY130 data

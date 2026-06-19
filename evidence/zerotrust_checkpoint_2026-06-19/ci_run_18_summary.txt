@@ -1,0 +1,22 @@
+run_number: 18
+run_id: 27799932447
+url: https://github.com/Netie-AI/OpenForge/actions/runs/27799932447
+head_sha: 6bc059965f0e512b8d7460a66c6f5dd7a162ca38
+head_commit_message: docs: Phase 2 status and phase1c verification notes  Add Phase 2 section to STATUS.md, update HANDOFF for Phase 2 exit path, clarify bootstrap/tolerance checks in verify_phase1c.py.  Co-authored-by: Cursor <cursoragent@cursor.com>
+status: completed
+conclusion: success
+run_started_at: 2026-06-19T01:32:56Z
+updated_at: 2026-06-19T01:38:00Z
+
+jobs:
+  job: test status=completed conclusion=success started=2026-06-19T01:32:58Z completed=2026-06-19T01:37:59Z
+    step: Set up job status=completed conclusion=success
+    step: Run actions/checkout@v4 status=completed conclusion=success
+    step: Run actions/setup-python@v5 status=completed conclusion=success
+    step: Install ngspice status=completed conclusion=success
+    step: Install Python deps status=completed conclusion=success
+    step: Pytest (unit) status=completed conclusion=success
+    step: Pytest (ngspice behavioral — Phase 1 gate) status=completed conclusion=success
+    step: Post Run actions/setup-python@v5 status=completed conclusion=success
+    step: Post Run actions/checkout@v4 status=completed conclusion=success
+    step: Complete job status=completed conclusion=success

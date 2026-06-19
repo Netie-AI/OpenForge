@@ -1,0 +1,42 @@
+=== BUNDLED (OPENFORGE_MODEL_SET=bundled) ===
+source: openanalog/sim/models.py BUNDLED_MODELS
+
+* openforge bundled models
+.model nmos_ana nmos (level=1 vto=0.7 kp=120u gamma=0.45 phi=0.8 lambda=0.02
++ tox=1e-8 cgso=2e-10 cgdo=2e-10 cj=1e-4 cjsw=5e-10)
+.model pmos_ana pmos (level=1 vto=-0.7 kp=40u gamma=0.45 phi=0.8 lambda=0.03
++ tox=1e-8 cgso=2e-10 cgdo=2e-10 cj=1e-4 cjsw=5e-10)
+
+=== SKY130 LEVEL1 (OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=level1) ===
+source: openanalog/sim/models.py SKY130_MODELS_BUILTIN
+
+* openforge sky130 models (level-1 calibrated)
+.model sky130_fd_pr__nfet_01v8 nmos (level=1 vto=0.48 kp=270u gamma=0.4 phi=0.8
++ lambda=0.02 tox=4.1e-9 cgso=1.5e-10 cgdo=1.5e-10 cj=1e-4 cjsw=5e-10)
+.model sky130_fd_pr__pfet_01v8 pmos (level=1 vto=-0.60 kp=90u gamma=0.4 phi=0.8
++ lambda=0.03 tox=4.1e-9 cgso=1.5e-10 cgdo=1.5e-10 cj=1e-4 cjsw=5e-10)
+.model sky130_fd_pr__npn_11v0 npn (is=1e-16 bf=100 nf=1.0 vaf=50 ikf=1e-3
++ cje=10f cjc=10f tf=100p tr=10n)
+.model sky130_fd_pr__pnp_11v0 pnp (is=1e-16 bf=80 nf=1.0 vaf=40 ikf=1e-3
++ cje=10f cjc=10f tf=100p tr=10n)
+
+=== SKY130 BSIM (OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim) ===
+source: data/pdk/sky130/models.sp (fetched via scripts/fetch_sky130_models.py @ commit=main)
+includes .include "sky130_fd_pr__nfet_01v8__tt.pm3.spice" and pfet pm3 — BSIM4 level=54 subckts
+
+=== PER-CATEGORY INSTANCE MODEL NAMES (from resolve_models) ===
+category: all topologies using resolve_models()
+bundled:  nmos=nmos_ana  pmos=pmos_ana
+sky130 L1: nmos=sky130_fd_pr__nfet_01v8  pmos=sky130_fd_pr__pfet_01v8  (level=1 .model cards above)
+sky130 bsim: same instance names but mos_subckt=True → X instances into BSIM4 subckts in pm3 files
+
+NMOS param diff (bundled vs sky130 level1):
+  vto: 0.7 vs 0.48
+  kp:  120u vs 270u
+  tox: 1e-8 vs 4.1e-9
+PMOS param diff (bundled vs sky130 level1):
+  vto: -0.7 vs -0.60
+  kp:  40u vs 90u
+  tox: 1e-8 vs 4.1e-9
+
+Both bundled and sky130 level1 use level=1 SPICE models, not BSIM4 cards from the PDK fetch.

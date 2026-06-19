@@ -1,4 +1,4 @@
-# OpenForge category status (updated 2026-06-18)
+# OpenForge category status (updated 2026-06-19)
 
 Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes.py`.
 
@@ -141,34 +141,39 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 # → http://127.0.0.1:8090  (8080 blocked — Windows excluded port range)
 ```
 
-## Phase 3 — SKY130 PDK (2026-06-19, in progress)
+## Phase 3 — SKY130 PDK (2026-06-19)
 
-**Zero-trust checkpoint:** evidence in `evidence/zerotrust_checkpoint_2026-06-19/` — **pending human review; Phase 3 hard-stopped until resolved.**
+**Zero-trust checkpoint:** evidence in `evidence/zerotrust_checkpoint_2026-06-19/` plus follow-up in `evidence/phase3_*_2026-06-19.log`.
+
+**SKY130/BSIM CI gap:** All SKY130 and BSIM work verified **locally only** — CI runs Phase 1 bundled-model behavioral tests only; **zero SKY130/BSIM coverage in GitHub Actions** until an explicit workflow step is added.
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Config switch | ✅ | `OPENFORGE_MODEL_SET=bundled\|sky130`; `OPENFORGE_SKY130_CARD=level1\|bsim` |
-| SKY130 level-1 smoke | ✅ | All 5 dev-mode categories pass RS bar (`OPENFORGE_MODEL_SET=sky130`, default card) |
-| BSIM subckt emit | ✅ | `mos_line`/`mos_inst` emit `X` instances for fetched BSIM4 subckts (fixes "can't find model") |
-| BSIM card sim | ⏳ | Fetched `models.sp` loads but pfet BSIM4 `.model` params fail ngspice substitute (`Cannot compute substitute`) — needs further PDK/volare work |
-| vref bandgap | ⏳ | Topology exists; needs SKY130 BJT validation once BSIM cards sim cleanly |
-| volare pin | ⏳ | `scripts/fetch_sky130_models.py` pins `google/skywater-pdk-libs-sky130_fd_pr@main` — needs explicit commit hash |
-| CI | ✅ | Run **#19** green on pushed HEAD `7dc7182` ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27802914554)) |
+| SKY130 level-1 smoke (5/5) | ⚠️ **not real SKY130** | **5/5 pass is against a hand-written level=1 placeholder** (`SKY130_MODELS_BUILTIN` in `openanalog/sim/models.py`) — SKY130-style device names, **not** loaded from `data/pdk/sky130/models.sp`, not BSIM4. **Do not treat as silicon validation.** |
+| BSIM subckt emit | ✅ | `mos_line`/`mos_inst` emit `X` instances for fetched BSIM4 subckts |
+| BSIM card sim | ✅ **5/5 smoke on pinned v0.13.0** | Root cause of pfet crash: missing BSIM mismatch `.param`s + newline glue bug — fixed in `openanalog/sim/models.py`. Models pinned to **`google/skywater-pdk-libs-sky130_fd_pr@v0.13.0`** (`2997061e…`). Re-run: `evidence/phase3_bsim_smoke_rerun_2026-06-19.log` — opamp **AOL=105.5 dB**, GBP=1.09 MHz, PM=75° (seed=42). Prior 4/5 log (`sky130_bsim_smoke_raw.log`, AOL=82 dB) was pre-fix / unstable AC on broken pfet path — **superseded.** |
+| Switch Ron seed sensitivity (BSIM) | ✅ **5/5 pass** | Seeds 1,3,7,11,12 @ budget=150: Ron **39.8–49.4 Ω** (all `<50 Ω`). Tight but robust — not a single lucky seed. `evidence/phase3_switch_bsim_seeds_2026-06-19.log` |
+| Opamp AOL on BSIM | ✅ **closed (seed=42 gate)** | Sizer closes via **L1↑ (0.5→2.37 µm)**, **W3→60 µm**, **W7→120 µm**, **Iref↓**, **Cc→0** for GBP trim. Causal: short L1 on BSIM4 collapsed input-pair ro → ~82 dB AOL when pfet AC sim was broken; longer L1 restores DC gain once models.py fix lands. Seed sweep (budget=200): **3/5 pass** (seeds 3,7,42); seed=1 misses GBP by 0.2%; seed=99 misses iq — **AOL passes all 5 seeds** (94–105 dB). The Phase 3 BSIM smoke **5/5** headline is the locked gate run at **seed=42**, while the separate robustness sweep over seeds **1/3/7/42/99** is **3/5 meets_all**. Same gate discipline as Phase 1d. `evidence/phase3_opamp_bsim_seeds_2026-06-19.log` |
+| vref bandgap | ⏳ | Topology exists; needs SKY130 BJT validation |
+| Model pin | ✅ **fetch script pinned** | `scripts/fetch_sky130_models.py` + `data/pdk/sky130/PIN.txt`: tag **v0.13.0**, commit **2997061e461c71e6e5c85153e3403ca74c62f69c**. **Volare still not installed** — pin is via raw GitHub fetch, not volare-managed PDK tree. |
+| CI | ✅ | Run **#19** green on pushed HEAD `7dc7182` — Phase 1 behavioral gate only; does not exercise SKY130 BSIM path |
 
-Reproduce level-1 SKY130: `OPENFORGE_MODEL_SET=sky130 make smoke-wsl`  
-Diagnose BSIM: `OPENFORGE_SKY130_CARD=bsim python scripts/diag_sky130_bsim.py` (WSL)
+Reproduce BSIM smoke: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` (WSL)  
+Switch seeds: `python scripts/verify_phase3_switch_bsim_seeds.py`  
+Opamp diag: `python scripts/diag_phase3_opamp_bsim_aol.py`
 
 ## Phase 3 Status (2026-06-15, superseded — see above)
 
-| Category    | Bundled | SKY130  | Notes                              |
-|-------------|---------|---------|-------------------------------------|
-| opamp       | ✅      | ✅      | AOL=107dB GBP=1.09MHz PM=76°       |
-| comparator  | ✅      | ✅      | tp=0.19µs Vos=0.30mV Iq=0.62µA    |
-| switch      | ✅      | ✅      | RON=13Ω BW=167MHz                  |
-| ldo         | ✅      | ✅      | vout=3.3V reg bench all measured   |
-| charge_pump | ✅      | ✅      | vout=5.0V bootstrapped NMOS Dickson|
-| multiplier  | ⚠️      | ⚠️      | Gilbert cell experimental (partial)|
-| vref        | ⏸      | ⚠️      | BJT needed; deferred to Phase 3.5  |
+| Category    | Bundled | SKY130 (placeholder level-1) | Notes                              |
+|-------------|---------|------------------------------|-------------------------------------|
+| opamp       | ✅      | ⚠️ placeholder 5/5           | RS bar pass on hand-written level-1 card — **not real SKY130 PDK** |
+| comparator  | ✅      | ⚠️ placeholder 5/5           | same caveat                         |
+| switch      | ✅      | ⚠️ placeholder 5/5           | same caveat                         |
+| ldo         | ✅      | ⚠️ placeholder 5/5           | same caveat                         |
+| charge_pump | ✅      | ⚠️ placeholder 5/5           | same caveat                         |
+| multiplier  | ⚠️      | ⚠️                           | Gilbert cell experimental (partial)|
+| vref        | ⏸      | ⏸                            | BJT needed; deferred until BSIM path works |
 
 ## Schematic / Phase 7 (2026-06-16, updated 2026-06-18)
 - **0.7:** Automated schematic connectivity checks — terminal anchors from `symbols.py` must match routed wires; netlist adjacency must match wire graph for placed devices; CI via `tests/test_schematic_connectivity.py`. Fixed mirrored-terminal routing (removed post-mirror grid snap that pulled M2 source off `(344,268)`).

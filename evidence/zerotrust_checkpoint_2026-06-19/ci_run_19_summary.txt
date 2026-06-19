@@ -1,0 +1,22 @@
+run_number: 19
+run_id: 27802914554
+url: https://github.com/Netie-AI/OpenForge/actions/runs/27802914554
+head_sha: 7dc71825e592c00abd45cac6eb7253a88b2dc02f
+head_commit_message: phase3: SKY130 BSIM subckt emit and card mode switch  Add OPENFORGE_SKY130_CARD=level1|bsim; mos_line emits X instances for BSIM4 subckts. BSIM pfet card still fails ngspice substitute — see STATUS.md.  Co-authored-by: Cursor <cursoragent@cursor.com>
+status: completed
+conclusion: success
+run_started_at: 2026-06-19T03:08:15Z
+updated_at: 2026-06-19T03:13:08Z
+
+jobs:
+  job: test status=completed conclusion=success started=2026-06-19T03:08:17Z completed=2026-06-19T03:13:07Z
+    step: Set up job status=completed conclusion=success
+    step: Run actions/checkout@v4 status=completed conclusion=success
+    step: Run actions/setup-python@v5 status=completed conclusion=success
+    step: Install ngspice status=completed conclusion=success
+    step: Install Python deps status=completed conclusion=success
+    step: Pytest (unit) status=completed conclusion=success
+    step: Pytest (ngspice behavioral — Phase 1 gate) status=completed conclusion=success
+    step: Post Run actions/setup-python@v5 status=completed conclusion=success
+    step: Post Run actions/checkout@v4 status=completed conclusion=success
+    step: Complete job status=completed conclusion=success

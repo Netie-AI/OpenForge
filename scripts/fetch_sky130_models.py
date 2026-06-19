@@ -17,9 +17,11 @@ OUT_DIR = ROOT / "data" / "pdk" / "sky130"
 OUT_FILE = OUT_DIR / "models.sp"
 PIN_FILE = OUT_DIR / "PIN.txt"
 
-# Pinned commit of sky130 ngspice model includes (update deliberately)
+# Pinned release of sky130 ngspice model includes (update deliberately)
 SKY130_REPO = "https://raw.githubusercontent.com/google/skywater-pdk-libs-sky130_fd_pr"
-SKY130_COMMIT = "main"
+SKY130_TAG = "v0.13.0"
+SKY130_COMMIT = "2997061e461c71e6e5c85153e3403ca74c62f69c"  # tag v0.13.0
+SKY130_COMMIT_REF = SKY130_TAG  # raw.githubusercontent.com accepts tag or hash
 MODEL_PATHS = [
     "cells/nfet_01v8/sky130_fd_pr__nfet_01v8__tt.corner.spice",
     "cells/pfet_01v8/sky130_fd_pr__pfet_01v8__tt.corner.spice",
@@ -56,10 +58,13 @@ def fetch_url(url: str) -> str | None:
 
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    parts = [f"* OpenForge SKY130 models — pin {SKY130_COMMIT}", ""]
+    parts = [
+        f"* OpenForge SKY130 models — pin {SKY130_TAG} ({SKY130_COMMIT})",
+        "",
+    ]
 
     for rel in MODEL_PATHS:
-        url = f"{SKY130_REPO}/{SKY130_COMMIT}/{rel}"
+        url = f"{SKY130_REPO}/{SKY130_COMMIT_REF}/{rel}"
         print(f"fetching {url}")
         text = fetch_url(url)
         if text:
@@ -68,7 +73,7 @@ def main() -> int:
             parts.append("")
 
     for rel in PM3_PATHS:
-        url = f"{SKY130_REPO}/{SKY130_COMMIT}/{rel}"
+        url = f"{SKY130_REPO}/{SKY130_COMMIT_REF}/{rel}"
         print(f"fetching {url}")
         text = fetch_url(url)
         if text:
@@ -77,7 +82,7 @@ def main() -> int:
             print(f"  wrote {OUT_DIR / name}")
 
     for rel in NPN_PATHS:
-        url = f"{SKY130_REPO}/{SKY130_COMMIT}/{rel}"
+        url = f"{SKY130_REPO}/{SKY130_COMMIT_REF}/{rel}"
         print(f"fetching {url}")
         text = fetch_url(url)
         if text:
@@ -89,6 +94,7 @@ def main() -> int:
     parts.append("* --- parasitic BJT (builtin) ---")
     parts.append(".model sky130_fd_pr__npn_11v0 npn (is=1e-16 bf=100 nf=1.0 vaf=50 ikf=1e-3)")
     parts.append(".model sky130_fd_pr__pnp_11v0 pnp (is=1e-16 bf=80 nf=1.0 vaf=40 ikf=1e-3)")
+    parts.append("")
 
     if len(parts) <= 3:
         print("fetch failed — writing fallback models")
@@ -97,7 +103,8 @@ def main() -> int:
         OUT_FILE.write_text("\n".join(parts) + "\n", encoding="utf-8")
 
     PIN_FILE.write_text(
-        f"repo={SKY130_REPO}\ncommit={SKY130_COMMIT}\noutput={OUT_FILE.name}\n",
+        f"repo={SKY130_REPO}\ntag={SKY130_TAG}\ncommit={SKY130_COMMIT}\n"
+        f"output={OUT_FILE.name}\n",
         encoding="utf-8",
     )
     print(f"wrote {OUT_FILE} ({OUT_FILE.stat().st_size} bytes)")

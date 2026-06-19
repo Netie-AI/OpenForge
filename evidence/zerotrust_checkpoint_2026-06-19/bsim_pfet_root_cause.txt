@@ -1,0 +1,21 @@
+BSIM pfet failure — root cause (from bsim_pfet_failure_raw.log, lines 1–14)
+
+Primary errors (in order):
+1. Netlist line 1526: Undefined parameter [vdd]
+   → Caused by models.sp BJT .model line glued to topology .param VDD (no trailing newline).
+     Observed: `.model sky130_fd_pr__pnp_11v0 pnp (... ikf=1e-3).param VDD=3.3`
+
+2. Netlist line 0: Undefined parameter [sky130_fd_pr__nfet_01v8__toxe_slope]
+   → Cascade from BSIM4 subckt .model expressions referencing mismatch slope params
+     (toxe_slope, vth0_slope, voff_slope, *_slope1, nfactor_slope) that the PDK
+     expects from Spectre statistics blocks but never defines for ngspice.
+
+Fix applied (openanalog/sim/models.py):
+- SKY130_BSIM_GLOBAL_DEFAULTS: .param all 12 missing slope keys = 0 (nominal TT)
+- _load_fetched_sky130_block(): ensure block ends with blank line before topology params
+
+Re-run (bsim_pfet_rerun_raw.log): run_ngspice ok=True
+  isupp=1.154e-4  aol_db=86.95  gbw_hz=2.568e7  ph_ugf=29.16
+
+Full BSIM smoke (sky130_bsim_smoke_raw.log): 4/5 pass
+  opamp FAIL — aol_dB=82.36 (needs ≥93.1); all other dev-mode categories pass
