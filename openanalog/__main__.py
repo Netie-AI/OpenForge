@@ -60,6 +60,8 @@ def forge_cmd(
     workers: int = typer.Option(4, "--workers"),
     reset: bool = typer.Option(False, "--reset", help="Clear forge checkpoint and restart"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Skip ngspice simulations"),
+    score_seeds: bool = typer.Option(True, "--score-seeds/--no-score-seeds", help="Score benchable seed netlists at forge start (Phase 2)"),
+    seed_score_limit: int = typer.Option(25, "--seed-score-limit", help="Max seed netlists to score per forge run"),
 ):
     from openanalog.forge.runner import run_forge
     from openanalog.verify.dashboard import show_dashboard
@@ -75,6 +77,8 @@ def forge_cmd(
             workers=workers,
             reset=reset,
             dry_run=dry_run,
+            score_seeds=score_seeds,
+            seed_score_limit=seed_score_limit,
         )
 
 

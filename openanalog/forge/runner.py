@@ -9,14 +9,19 @@ from rich.progress import Progress
 
 from openanalog import claude
 from openanalog.confidence import kg_tier
-from openanalog.config import FORGE_STATE, SEEDS_NORMALIZED, ensure_dirs
+from openanalog.config import FORGE_STATE, ensure_dirs
 from openanalog.forge.dataset_writer import DatasetWriter
 from openanalog.forge.forge_eval import evaluate_topology_params
 from openanalog.forge.knowledge_graph import KnowledgeGraph
 from openanalog.forge.param_mutator import apply_seed_hints, mutate_params, opamp_warm_start_params
+from openanalog.forge.seed_scoring import (
+    group_seed_hints,
+    load_normalized_seeds,
+    run_seed_scoring,
+    select_benchable_seeds,
+)
 from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
 from openanalog.forge.topologies import get_topology
-from openanalog.ingestion.converter import extract_params
 
 console = Console()
 
@@ -27,55 +32,6 @@ FORGE_STATS: dict = {
 }
 
 FORGE_CATEGORIES = tuple(DEV_MODE_SPECS.keys())
-
-_SEED_TYPE_MAP: dict[str, str] = {
-    "opamp": "opamp",
-    "op_amp": "opamp",
-    "amplifier": "opamp",
-    "diff_amp": "opamp",
-    "ota": "opamp",
-    "comparator": "comparator",
-    "switch": "switch",
-    "analog_switch": "switch",
-    "charge_pump": "charge_pump",
-    "ldo": "ldo",
-    "linear_regulator": "ldo",
-}
-
-
-def _map_seed_category(raw: str | None) -> str | None:
-    if not raw:
-        return None
-    return _SEED_TYPE_MAP.get(raw.lower().replace("-", "_"))
-
-
-def _load_seeds(topology: str | None) -> list[dict]:
-    path = SEEDS_NORMALIZED
-    if not path.exists():
-        return []
-    seeds = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        rec = json.loads(line)
-        cat = _map_seed_category(rec.get("circuit_type"))
-        if topology and cat != topology:
-            continue
-        if rec.get("netlist"):
-            seeds.append(rec)
-    return seeds
-
-
-def _group_seed_hints(seeds: list[dict]) -> dict[str, list[dict[str, float]]]:
-    grouped: dict[str, list[dict[str, float]]] = {c: [] for c in FORGE_CATEGORIES}
-    for rec in seeds:
-        cat = _map_seed_category(rec.get("circuit_type"))
-        if cat not in grouped:
-            continue
-        hints = extract_params(rec.get("netlist", ""))
-        if hints:
-            grouped[cat].append(hints)
-    return grouped
 
 
 def _update_stats(topo: str, won: bool, stats: dict) -> None:
@@ -194,6 +150,8 @@ def run_forge(
     workers: int = 4,
     reset: bool = False,
     dry_run: bool = False,
+    score_seeds: bool = True,
+    seed_score_limit: int = 25,
 ) -> None:
     ensure_dirs()
     if reset and FORGE_STATE.exists():
@@ -215,10 +173,19 @@ def run_forge(
     else:
         categories = list(FORGE_CATEGORIES)
 
-    seeds = _load_seeds(None if all_topologies else topology)
-    hint_groups = _group_seed_hints(seeds)
+    seeds = load_normalized_seeds(
+        topology=None if all_topologies else topology,
+        sim_validated_only=False,
+    )
+    hint_groups = group_seed_hints(seeds)
+    benchable = select_benchable_seeds(
+        load_normalized_seeds(topology=None if all_topologies else topology, sim_validated_only=True)
+    )
     if seeds:
-        console.print(f"[dim]Loaded {len(seeds)} seeds for parameter hints (not netlist mutation)[/dim]")
+        console.print(
+            f"[dim]Loaded {len(seeds)} seeds — param hints + "
+            f"{len(benchable)} benchable sim-validated netlists (Phase 2)[/dim]"
+        )
     else:
         console.print("[dim]No seed file — mutating topology default params only[/dim]")
 
@@ -226,6 +193,32 @@ def run_forge(
     kg.load()
     writer = DatasetWriter()
     workers = max(1, workers)
+
+    if score_seeds and benchable and not dry_run and start == 0:
+        console.print(
+            f"[dim]Scoring up to {min(seed_score_limit, len(benchable))} seed netlists "
+            f"via evaluate_forge_fitness (RS bar)...[/dim]"
+        )
+
+        def _on_seed(result: dict[str, Any], *, generation: int) -> None:
+            _process_result(
+                result,
+                generation=generation,
+                stats=stats,
+                writer=writer,
+                kg=kg,
+            )
+
+        seed_counts = run_seed_scoring(
+            limit=seed_score_limit,
+            topology=None if all_topologies else topology,
+            process_result=_on_seed,
+            generation_offset=-seed_score_limit,
+        )
+        console.print(
+            f"[dim]Seed pass: scored={seed_counts['scored']} "
+            f"sim_ok={seed_counts['sim_ok']} fitness=1={seed_counts['fitness_1']}[/dim]"
+        )
 
     with Progress() as progress:
         task = progress.add_task("Forge simulations", total=n, completed=start)
@@ -299,7 +292,7 @@ def run_forge(
     )
     console.print(
         f"Done: {stats['sims']} sims, {stats['winners']} winners "
-        f"(RS-series bar — topology param mutation)"
+        f"(RS-series bar — seed netlists + topology param mutation)"
     )
 
 
