@@ -151,6 +151,7 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 | BSIM card sim | ⏳ | Fetched `models.sp` loads but pfet BSIM4 `.model` params fail ngspice substitute (`Cannot compute substitute`) — needs further PDK/volare work |
 | vref bandgap | ⏳ | Topology exists; needs SKY130 BJT validation once BSIM cards sim cleanly |
 | volare pin | ⏳ | `scripts/fetch_sky130_models.py` pins `google/skywater-pdk-libs-sky130_fd_pr@main` — needs explicit commit hash |
+| CI | ✅ | Run **#19** green on pushed HEAD `7dc7182` ([Actions run](https://github.com/Netie-AI/OpenForge/actions/runs/27802914554)) |
 
 Reproduce level-1 SKY130: `OPENFORGE_MODEL_SET=sky130 make smoke-wsl`  
 Diagnose BSIM: `OPENFORGE_SKY130_CARD=bsim python scripts/diag_sky130_bsim.py` (WSL)
