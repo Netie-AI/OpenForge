@@ -141,7 +141,12 @@ def sky130_models_block(*, card: str | None = None) -> str:
 
 
 def resolve_models(model_set: str | None = None) -> ResolvedModels:
-    ms = (model_set or active_model_set() or MODEL_SET).lower()
+    if model_set:
+        ms = model_set.lower()
+    elif active_model_set() != "bundled":
+        ms = active_model_set()
+    else:
+        ms = MODEL_SET.lower()
     if ms == "sky130":
         card = _sky130_card_flavor()
         block = sky130_models_block(card=card)

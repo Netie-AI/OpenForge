@@ -63,9 +63,9 @@ let isupp = abs(i(vsup))
 print isupp
 dc Vsup 3 5.5 0.1
 meas dc vref_nom find v(vref) when v(vdd)=5
-meas dc line_reg max(v(vref)) - min(v(vref))
+meas dc line_reg pp v(vref)
 dc Vsup 5 5 1 temp -40 125 20
-meas dc tempco max(v(vref)) - min(v(vref))
+meas dc tempco pp v(vref)
 .endc
 .end
 """
