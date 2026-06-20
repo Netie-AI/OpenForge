@@ -270,6 +270,20 @@ Datasheet header includes `RL=10k` to `VS/2`. Added diagnostic path in `_build_c
 
 Interpretation: RL materially changes measured CMRR but still leaves values far above RS321 typ 80 dB. This resolves one fixture dimension (load), not full datasheet-equivalence.
 
+### ACM noise-floor probe (`scripts/diag_opamp_cmrr_acm_floor.py`, 2026-06-20)
+
+Claude reviewer gate before further sweeps: confirm CM-AC output is real signal, not dB-of-near-zero artifact.
+
+| Lb | Model | acm_vm @100 Hz | stim_ok | phase_ok | Verdict |
+|----|-------|----------------|---------|----------|---------|
+| 0.5 | bundled | **69.5 µV** | yes (0.1000 V both inputs) | yes (0° Δ) | Real signal |
+| 1.0 | bundled | **98.0 µV** | yes | yes | Real signal |
+| 8.0 | bundled | **272 µV** | yes | yes | Real signal |
+| 0.5 | BSIM | **46.9 µV** | yes | yes | Real signal |
+| 8.0 | BSIM | **185 µV** | yes | yes | Real signal |
+
+Harness confirmed: `Vinp vinp 0 dc {VCM} ac 0.1`, `Vinn vinn 0 dc {VCM} ac 0.1` — both nodes at **0.1000 V** magnitude, **-20.0 dB**, **0° phase delta** at 100 Hz. **Noise-floor hypothesis refuted** (acm_vm ≫ 1 nV). Lb sweep Δ pattern is real ACM variation, not simulator floor division. Remaining gap vs RS321 typ 80 dB is **not** explained by near-zero ACM — next axis: feedback/fixture equivalence (RL=10k harness matching datasheet conditions).
+
 ### Decision
 
 CMRR bench is measurable and normalization-corrected, but **not closed**. 152 dB open-loop magnitude is not physically credible for this topology on bundled or BSIM models; tail/bias Ro (especially M8 **Lb**) is confirmed causal but does not bring numbers toward RS321 typ 80 dB. Remains bench-only until fixture-equivalence is explicitly resolved. **No production-fixture policy lock.**
@@ -279,4 +293,4 @@ CMRR bench is measurable and normalization-corrected, but **not closed**. 152 dB
 - `openanalog/forge/topologies/opamp.py` — `_build_cmrr_deck`, `aol_db_100`, and `cmrr_dB` wiring
 - `scripts/verify_cmrr.py`
 - `scripts/diag_opamp_cmrr_breakdown.py` — `--lb-only` for BSIM follow-up; `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/diag_opamp_cmrr_breakdown.py --lb-only` (parent + dv-verifier rerun 2026-06-20)
-- `scripts/diag_opamp_cmrr_fixture.py`
+- `scripts/diag_opamp_cmrr_acm_floor.py` — raw `acm_vm` + input stimulus probe (parent rerun 2026-06-20)
