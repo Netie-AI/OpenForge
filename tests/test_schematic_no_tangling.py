@@ -77,6 +77,9 @@ def test_opamp_variant_search_has_score_and_variant() -> None:
     layout = build_schematic_layout(_opamp_devices(), {"topology": "two_stage_miller_opamp"})
     assert layout.variant in _STAGE2_VARIANTS
     assert layout.crossing_score >= 0
+    assert layout.crossing_score <= 3, (
+        f"crossing_score={layout.crossing_score}, Miller-cap passive tap target <=3"
+    )
 
 
 def test_chosen_variant_not_worse_than_isolated_baseline() -> None:

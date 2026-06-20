@@ -316,6 +316,72 @@ def _junction_points(segments: list[RoutedSegment]) -> set[Point]:
     return {Point(x, y) for (x, y), d in degree.items() if d >= 3}
 
 
+def _is_passive_bridge(dev: SpiceDevice) -> bool:
+    return dev.kind in ("C", "R") and len(dev.nodes) == 2
+
+
+def _passive_dev_names(placed: list) -> frozenset[str]:
+    return frozenset(
+        pd.dev.name.upper() for pd in placed if _is_passive_bridge(pd.dev)
+    )
+
+
+def _clamp(v: int, lo: int, hi: int) -> int:
+    return max(lo, min(hi, v))
+
+
+def _nearest_tap_on_segment(pt: Point, seg: RoutedSegment) -> tuple[Point, int]:
+    """Closest Manhattan tap point on an axis-aligned wire segment."""
+    if seg.x1 == seg.x2:
+        x = seg.x1
+        y = _clamp(pt.y, min(seg.y1, seg.y2), max(seg.y1, seg.y2))
+        tap = Point(x, y)
+        return tap, abs(pt.x - x) + abs(pt.y - y)
+    if seg.y1 == seg.y2:
+        y = seg.y1
+        x = _clamp(pt.x, min(seg.x1, seg.x2), max(seg.x1, seg.x2))
+        tap = Point(x, y)
+        return tap, abs(pt.x - x) + abs(pt.y - y)
+    return pt, 10**9
+
+
+def _orthogonal_tap_segments(from_pt: Point, tap: Point, net: str) -> list[RoutedSegment]:
+    """Connect stub end to backbone with one or two orthogonal legs."""
+    if from_pt.x == tap.x and from_pt.y == tap.y:
+        return []
+    if from_pt.x == tap.x or from_pt.y == tap.y:
+        return [RoutedSegment(from_pt.x, from_pt.y, tap.x, tap.y, net)]
+    via_h = Point(tap.x, from_pt.y)
+    via_v = Point(from_pt.x, tap.y)
+    if _manhattan(from_pt, via_h) + _manhattan(via_h, tap) <= _manhattan(from_pt, via_v) + _manhattan(via_v, tap):
+        path = [from_pt, via_h, tap]
+    else:
+        path = [from_pt, via_v, tap]
+    return _path_to_segments(path, net)
+
+
+def _tap_passive_stubs(
+    passive_stubs: list[TerminalStub],
+    net_name: str,
+    wire_segs: list[RoutedSegment],
+    segments_out: list[RoutedSegment],
+) -> None:
+    """Second pass: connect passive stub ends onto existing net wires (Miller cap taps)."""
+    if not wire_segs or not passive_stubs:
+        return
+    for stub in passive_stubs:
+        best_tap: Point | None = None
+        best_dist = 10**9
+        for seg in wire_segs:
+            tap, dist = _nearest_tap_on_segment(stub.stub_end, seg)
+            if dist < best_dist:
+                best_dist = dist
+                best_tap = tap
+        if best_tap is None:
+            continue
+        segments_out.extend(_orthogonal_tap_segments(stub.stub_end, best_tap, net_name))
+
+
 def route_nets(
     placed: list,
     *,
@@ -324,6 +390,7 @@ def route_nets(
     """Route all signal nets for placed devices."""
     rails = rail_names or frozenset({"vdd", "vdd3", "0"})
     obstacles = device_obstacles(placed)
+    passive_names = _passive_dev_names(placed)
 
     net_stubs: dict[str, list[TerminalStub]] = {}
     for pd in placed:
@@ -342,6 +409,10 @@ def route_nets(
     )
 
     for net_name, stubs in net_stubs.items():
+        active_stubs = [s for s in stubs if s.dev_name not in passive_names]
+        passive_stubs = [s for s in stubs if s.dev_name in passive_names]
+        route_stubs = active_stubs if active_stubs else stubs
+
         if len(stubs) < 2:
             for stub in stubs:
                 all_segments.append(
@@ -368,7 +439,7 @@ def route_nets(
                 )
             )
 
-        ends = [s.stub_end for s in stubs]
+        ends = [s.stub_end for s in route_stubs]
         unique_ends: list[Point] = []
         seen: set[tuple[int, int]] = set()
         for p in ends:
@@ -377,21 +448,21 @@ def route_nets(
                 seen.add(k)
                 unique_ends.append(p)
 
-        if len(unique_ends) == 1:
-            continue
-
-        for i, j in _mst_edges(unique_ends):
-            path = _shortest_path(unique_ends[i], unique_ends[j], graph_nodes, obstacles)
-            if path is None:
-                mid = Point(
-                    snap((unique_ends[i].x + unique_ends[j].x) // 2),
-                    snap((unique_ends[i].y + unique_ends[j].y) // 2),
-                )
-                path = [unique_ends[i], mid, unique_ends[j]]
-            all_segments.extend(_path_to_segments(path, net_name))
+        if len(unique_ends) >= 2:
+            for i, j in _mst_edges(unique_ends):
+                path = _shortest_path(unique_ends[i], unique_ends[j], graph_nodes, obstacles)
+                if path is None:
+                    mid = Point(
+                        snap((unique_ends[i].x + unique_ends[j].x) // 2),
+                        snap((unique_ends[i].y + unique_ends[j].y) // 2),
+                    )
+                    path = [unique_ends[i], mid, unique_ends[j]]
+                all_segments.extend(_path_to_segments(path, net_name))
 
         net_segs = [s for s in all_segments if s.net == net_name and s.kind == "wire"]
-        if len(stubs) >= 3:
+        _tap_passive_stubs(passive_stubs, net_name, net_segs, all_segments)
+        net_segs = [s for s in all_segments if s.net == net_name and s.kind == "wire"]
+        if len(route_stubs) >= 3:
             all_junctions |= _junction_points(net_segs)
 
     all_segments = _merge_collinear(all_segments)

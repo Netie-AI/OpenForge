@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (CMRR Option B partial + mismatch ceiling; ACM probe dv-verifier confirmed)  
-**HEAD (local):** `3f6c4db` on `feat/schematic-orthogonal-router` (pushed)
+**Updated:** 2026-06-20 (schematic passive tap 6→3; CMRR parked)  
+**HEAD (local):** `6edfac5` on `feat/schematic-orthogonal-router` (pushed; code commit pending)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
@@ -26,9 +26,9 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | Priority | Task | Gate |
 |----------|------|------|
 | **1** | **BSIM CI proof via PR** | Commits `ef43ef6`/`a8e8097`/`85a8d51` pushed; local WSL BSIM smoke **5/5** re-verified at `85a8d51`. **Blocker:** no open PR (`gh` not authenticated); GitHub API still shows **0** PR runs on this branch. Open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
-| **2** | **CMRR — parked (Option B honest partial)** | **Authorized RL=10k fixture run complete** (`diag_opamp_cmrr_fixture.py`, dv-verifier pending): defaults open-loop **152.0 dB** → rl10k **127.4 dB** (**−24.6 dB**); sized s42 **151.4 → 142.4 dB** (**−9.0 dB**). Still **47 dB above** RS321 typ 80 dB with RL — gap not closeable without mismatch modeling (Phase 4+, `PARKING_LOT.md`). **Stop CMRR diagnostic churn** until Monte Carlo lands. Bench-only; not in `DEV_MODE_SPECS`. |
+| **2** | **CMRR — parked (Option B honest partial)** | RL=10k fixture run complete (dv-verifier confirmed): **152.0→127.4 dB** (−24.6 dB, CM-path only); **47 dB above** RS321 typ. **Stop CMRR churn** until Monte Carlo Phase 4+. |
 | **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
-| **4** | **Schematic tangling reduction follow-up** | Cherry-pick **landed** (`ef43ef6`); `tail_aligned` variant, `nb` x-span **300→174**, `crossing_score=6` (partial). Next: Cc passive tap second pass; keep `route_nets()` + connectivity **14/14** |
+| **4** | ~~**Schematic tangling — Cc passive tap**~~ | **Done 2026-06-20:** `schematic_router.py` passive second pass; **`crossing_score` 6→3**; pytest **19/19** |
 | Parking lot | Generative layout pilot (ALIGN/MAGICAL) | Phase 7+ — see `docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md`; after BSIM CI PR |
 
 **Do NOT start:** Phase 4/5, LoRA, cross-repo Cursor brain, layout/DRC/LVS, PLL/SerDes/standard-cells/high-speed IO (`PARKING_LOT.md` § out of scope).
@@ -61,7 +61,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | BSIM smoke + CI wiring | Local rerun at `85a8d51`: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = **5/5 pass** (`vref` deferred); `.github/workflows/ci.yml` includes `sky130-bsim-smoke` job — **Actions URL not verified** (needs PR; branch has no PR runs yet) |
 | CMRR tail/bias sweep | `diag_opamp_cmrr_breakdown.py` rerun: Lb sweep **159.5→125.5 dB** (0.5→8 µm); rl10k fixture **15–25 dB** below open-loop on defaults. Policy lock **reverted** — fixture decision held until causal story + datasheet equivalence |
 | CMRR RL=10k fixture (authorized one-shot) | `diag_opamp_cmrr_fixture.py`: defaults **152.0→127.4 dB** (−24.6 dB); still **47 dB above** RS321 typ 80 dB. **Option B parked** — stop churn until Monte Carlo Phase 4+ |
-| Schematic tangling guard | Added `openanalog/eda/schematic_geometry.py`, opamp placement-variant scoring in `schematic_layout.py`, and `tests/test_schematic_no_tangling.py` (**5 passed**). Chosen variant `tail_aligned`; `nb` x-span **300→174**; residual `crossing_score=6` still open |
+| Schematic Miller passive tap | `route_nets()` second pass for 2-terminal C/R; **`crossing_score` 6→3**; `tests/test_schematic_no_tangling.py` bound tightened to ≤3 |
 | Agentic EDA survey | `docs/research/AGENTIC_EDA_SURVEY.md` |
 | Cursor conventions | `.cursor/skills/openforge-conventions/SKILL.md` |
 

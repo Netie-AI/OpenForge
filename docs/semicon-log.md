@@ -268,7 +268,7 @@ Datasheet header includes `RL=10k` to `VS/2`. Added diagnostic path in `_build_c
 | defaults | 152.0 | 127.4 | -24.6 dB |
 | sized s42 | 151.4 | 142.4 | -9.0 dB |
 
-Interpretation: RL materially changes measured CMRR but still leaves values far above RS321 typ 80 dB. This resolves one fixture dimension (load), not full datasheet-equivalence.
+Interpretation: RL materially changes measured CMRR but still leaves values far above RS321 typ 80 dB. **RL move is entirely CM-path** — back-solving `aol100 = cmrr − (acm+20)` gives **91.8 dB** for both base and rl=10k rows (aol unaffected); the −24.6 dB delta is **acm −80.2→−55.6 dB** only.
 
 ### ACM noise-floor probe (`scripts/diag_opamp_cmrr_acm_floor.py`, 2026-06-20)
 

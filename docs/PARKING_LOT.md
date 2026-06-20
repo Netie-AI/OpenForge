@@ -14,7 +14,7 @@
 |---|------------|----------------------|
 | 1 | **BSIM CI proof via PR** | `85a8d51` pushed (`ef43ef6` + doc sync); local BSIM smoke **5/5** at HEAD; branch still has **0** PR workflow runs. Open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and capture green `sky130-bsim-smoke` Actions URL in `STATUS.md` |
 | 2 | ~~**CMRR fixture equivalence evidence**~~ | **Parked 2026-06-20 (Option B).** RL=10k run: 152.0→127.4 dB (−24.6 dB); still 47 dB above RS321 typ 80 dB. Mismatch ceiling documented — resume only when Monte Carlo Phase 4+ lands |
-| 3 | **Schematic tangling reduction follow-up** | `tail_aligned` variant landed (`nb` span 300→174); next: Cc passive tap routing second pass to drive `crossing_score` from 6 toward `<=3`; keep `route_nets()` + connectivity 14/14 green |
+| 3 | ~~**Schematic tangling — Cc passive tap**~~ | **Done 2026-06-20:** `route_nets()` passive second pass; `crossing_score` **6→3**; pytest **19/19** |
 
 **First metric when PVT starts (2026-06-20):** **PSRR** — ✅ landed (`scripts/verify_psrr.py`, `STATUS.md`). **CMRR** — **Option B parked** (bench-only; RL=10k run complete; mismatch ceiling documented; no further diagnostics until Monte Carlo Phase 4+).
 
