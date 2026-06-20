@@ -12,12 +12,11 @@
 
 | # | Workstream | Gate before starting |
 |---|------------|----------------------|
-| 1 | **CMRR testbench** (next PVT metric) | PSRR done — `scripts/verify_psrr.py`; see `STATUS.md` § PSRR |
-| 2 | **Phase 0.8 schematic sign-off** | `pytest tests/test_schematic_connectivity.py -v` |
-| 3 | **BSIM CI job** | Local BSIM stable; vref honest-partial recorded |
-| 4 | **Schematic drag-reroute + stub-then-fold verifier** | After PVT tail — do not interleave |
+| 1 | **BSIM CI proof on pushed HEAD** | `sky130-bsim-smoke` workflow job exists; capture first green Actions run URL and update `STATUS.md` |
+| 2 | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) before envelope discussions |
+| 3 | **Schematic tangling reduction follow-up** | 0.8 router + new tangling tests are green; reduce opamp `crossing_score` from 6 toward `<=3` without breaking connectivity tests |
 
-**First metric when PVT starts (2026-06-20):** **PSRR** — ✅ landed (`scripts/verify_psrr.py`, `STATUS.md`). **Next:** CMRR.
+**First metric when PVT starts (2026-06-20):** **PSRR** — ✅ landed (`scripts/verify_psrr.py`, `STATUS.md`). **CMRR** is `partial`: normalization corrected and RL fixture sanity run, but datasheet-equivalence remains unverified.
 
 ---
 
@@ -44,7 +43,7 @@ High-speed mixed-signal (RF/datacom) is a **different specialty** from precision
 
 | Claim from generic roadmaps | OpenForge reality |
 |-----------------------------|-------------------|
-| “Need real PDK / BSIM, not level-1 only” | **Phase 3 in progress** — SKY130 BSIM opamp/switch closed locally; CI gap documented in `STATUS.md` |
+| “Need real PDK / BSIM, not level-1 only” | **Phase 3 in progress** — SKY130 BSIM opamp/switch closed locally; CI workflow wired (`sky130-bsim-smoke`), awaiting first green pushed-HEAD proof in `STATUS.md` |
 | “Need verify loop / fitness toward spec” | **Forge + ngspice + `spec_envelopes.py`** — sizing loop exists; Phase 4 adds topology mutation |
 | “Need layout → DRC → LVS → PEX” | **North star** in `AGENT_PLAN.md` / `HANDOFF.md` — explicitly after Phase 1–3 |
 | “Stop UI, focus core only” | **UI has surfaced real bugs** (M2 anchor, IO stub gap, connectivity verifier gaps) — keep as diagnostic, not primary sprint |
@@ -119,7 +118,7 @@ Functional equivalent of “Gym / RL reward”: **`score_design` + `meets_all` +
 | Min/typical/max range checking | Datasheet specs are bands, not just floors | vref iq closed |
 | KCL at `.op` | Sum node currents from ngspice `.op`; flag \|ΣI\| > tol | vref iq |
 | Device operating-region check | Saturation/linear/cutoff per FET at bias point | KCL or parallel |
-| BSIM / SKY130 **CI** hardening | Local 5/5 smoke exists; **GitHub Actions** still bundled-only | vref iq |
+| BSIM / SKY130 **CI** hardening | Local 5/5 smoke exists; GitHub Actions now includes `sky130-bsim-smoke` — record first green pushed-HEAD run URL in `STATUS.md` | vref iq |
 
 ---
 
@@ -149,7 +148,7 @@ Functional equivalent of “Gym / RL reward”: **`score_design` + `meets_all` +
 
 | Item | Notes | Do not |
 |------|-------|--------|
-| OpenForge Cursor skills/rules hardening | `.cursor/.skills/SKILL.md`, evidence gates | Mix with schematic edits |
+| OpenForge Cursor skills/rules hardening | Owner-managed only (`.cursor/agents`, `.cursor/rules`, `.cursor/skills`); assistants treat as read-only unless explicitly requested by owner. Maintain `.cursor/rules/mode-routing-and-collab-gates.mdc` + `.cursor/skills/mode-routing/SKILL.md` | Mix with schematic edits |
 | Global skills across 4 repos | OpenForge, OpenHBM, NVMe Sentinel, OpenMiddleware — **no context on other three yet** | Guess cross-repo rules |
 | MCP automation setup | Subagents, parallel runners, CI hooks | Half-attentive config |
 | Semiconductor skill / “Cursor brain” | Dedicated authoring + eval | Stack on open gates |
@@ -186,4 +185,4 @@ Paper in inbox: `papers/inbox/2407.18272v1.pdf` — ingest when Phase 2 PDF pipe
 > UI corruption (2026-06-19) came from rapid iteration without browser check.  
 > **Green test + you opened the page** = minimum bar for “done.”
 
-See also: `docs/HANDOFF.md`, `docs/STATUS.md`, `docs/analog_design_rules.md`, `AGENT_PLAN.md`, `.cursor/.skills/SKILL.md`.
+See also: `docs/HANDOFF.md`, `docs/STATUS.md`, `docs/analog_design_rules.md`, `AGENT_PLAN.md`, `.cursor/skills/openforge-conventions/SKILL.md`.

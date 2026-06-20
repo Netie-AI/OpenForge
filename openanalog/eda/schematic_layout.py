@@ -8,8 +8,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from openanalog.eda.netlist_graph import SpiceDevice
+from openanalog.eda.schematic_geometry import DeviceBox, Segment, score_layout
 from openanalog.eda.schematic_router import route_nets, segments_to_svg_lines
-from openanalog.eda.symbols import Point, render_symbol, snap, terminal_positions
+from openanalog.eda.symbols import Point, render_symbol, snap, symbol_for_device, terminal_positions
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,11 @@ _DIFF_PAIR_LAYOUT: dict[str, tuple[str, int, bool]] = {
     "Rload": ("output", 2, False),
 }
 
+_STAGE2_VARIANTS: dict[str, dict[str, tuple[str, int, bool]]] = {
+    "isolated": {"M6": ("output", 0, False), "M7": ("output", 1, False)},
+    "tail_aligned": {"M6": ("output", 0, False), "M7": ("tail", 1, False)},
+}
+
 _ZONE_Y = {
     "load": 120,
     "input": 230,
@@ -83,6 +89,8 @@ class SchematicLayout:
     floorplan_defined: bool = True
     topology: str = ""
     title_suffix: str = "schematic"
+    variant: str = "default"
+    crossing_score: int = -1
 
 
 def _expand_device_roles(meta: list[dict[str, Any]]) -> dict[str, str]:
@@ -213,6 +221,118 @@ def _gnd_points(placed: list[PlacedDevice]) -> list[Point]:
     return pts
 
 
+def _device_boxes(placed: list[PlacedDevice]) -> list[DeviceBox]:
+    boxes: list[DeviceBox] = []
+    for pd in placed:
+        sym = symbol_for_device(pd.dev)
+        width = sym.width
+        height = sym.height
+        # Cc is rendered by _draw_miller_cap (wider than generic cap symbol).
+        if pd.dev.kind == "C" and pd.dev.name.upper() == "CC":
+            width = max(width, 54)
+            height = max(height, 48)
+        terminal_nets = frozenset(
+            node.lower() for node in terminal_positions(pd.dev, pd.origin, mirror=pd.mirror).keys()
+        )
+        boxes.append(
+            DeviceBox(
+                name=pd.dev.name,
+                x=pd.origin.x,
+                y=pd.origin.y,
+                w=width,
+                h=height,
+                terminal_nets=terminal_nets,
+            )
+        )
+    return boxes
+
+
+def _segments_for_score(layout: SchematicLayout) -> tuple[list[Segment], set[tuple[int, int]]]:
+    routed = route_nets(layout.placed)
+    segments: list[Segment] = []
+    for s in routed.segments:
+        kind = "stub" if s.kind == "stub" else "wire"
+        if s.x1 == s.x2 or s.y1 == s.y2:
+            segments.append(Segment(x1=s.x1, y1=s.y1, x2=s.x2, y2=s.y2, net=s.net, kind=kind))
+            continue
+        # Rare fallback path emits diagonal hops; split into two orthogonal legs for scoring.
+        corner_x, corner_y = s.x2, s.y1
+        segments.append(Segment(x1=s.x1, y1=s.y1, x2=corner_x, y2=corner_y, net=s.net, kind=kind))
+        segments.append(Segment(x1=corner_x, y1=corner_y, x2=s.x2, y2=s.y2, net=s.net, kind=kind))
+    junctions = {(pt.x, pt.y) for pt in routed.junctions}
+    return segments, junctions
+
+
+def _score_layout(layout: SchematicLayout) -> int:
+    segments, junctions = _segments_for_score(layout)
+    return score_layout(segments, junctions, _device_boxes(layout.placed))
+
+
+def _span_pressure_penalty(placed: list[PlacedDevice]) -> int:
+    """Penalty for long multi-terminal nets that tend to force cross-canvas wires."""
+    penalty = 0
+    nets = _collect_net_points(placed)
+    for net_name, points in nets.items():
+        if net_name in {"vdd", "vdd3", "0"}:
+            continue
+        unique = {(pt.x, pt.y) for pt in points}
+        if len(unique) < 3:
+            continue
+        xs = [pt[0] for pt in unique]
+        ys = [pt[1] for pt in unique]
+        span = max(max(xs) - min(xs), max(ys) - min(ys))
+        if span <= 120:
+            continue
+        fanout_weight = max(1, len(unique) - 2)
+        # Bias spine (`nb`) is the known pressure net in the opamp floorplan.
+        if net_name == "nb":
+            fanout_weight += 4
+        penalty += fanout_weight * max(1, span // 80)
+    return penalty
+
+
+def _placement_objective(layout: SchematicLayout) -> tuple[int, int, int]:
+    crossing = _score_layout(layout)
+    span_penalty = _span_pressure_penalty(layout.placed)
+    return (crossing + span_penalty, crossing, span_penalty)
+
+
+def _choose_opamp_variant(devices: list[SpiceDevice], topology: str) -> tuple[str, int, list[PlacedDevice]]:
+    best_variant = "isolated"
+    best_score = 10**9
+    best_obj = (10**9, 10**9, 10**9)
+    best_placed: list[PlacedDevice] = []
+    for variant_name, stage2 in _STAGE2_VARIANTS.items():
+        layout_map = {k.upper(): v for k, v in _DIFF_PAIR_LAYOUT.items()}
+        for name, spec in stage2.items():
+            layout_map[name.upper()] = spec
+        placed = _place_devices(devices, layout_map, floorplan_defined=True)
+        trial = SchematicLayout(
+            width=0,
+            height=0,
+            placed=placed,
+            floorplan_defined=True,
+            topology=topology,
+            variant=variant_name,
+        )
+        obj = _placement_objective(trial)
+        score = obj[1]
+        log.info(
+            "schematic floorplan variant=%s objective=%d crossing_score=%d span_penalty=%d",
+            variant_name,
+            obj[0],
+            obj[1],
+            obj[2],
+        )
+        if obj < best_obj:
+            best_obj = obj
+            best_variant = variant_name
+            best_score = score
+            best_placed = placed
+
+    return best_variant, best_score, best_placed
+
+
 def _draw_rails(
     placed: list[PlacedDevice],
     nets: dict[str, list[Point]],
@@ -304,9 +424,16 @@ def build_schematic_layout(
     result = result or {}
     topology = str(result.get("topology") or result.get("category") or "")
     device_meta = result.get("devices") or []
+    topo = topology.lower()
 
-    layout_map, floorplan_defined = _resolve_layout(devices, topology, device_meta)
-    placed = _place_devices(devices, layout_map, floorplan_defined=floorplan_defined)
+    variant = "default"
+    if topo == "two_stage_miller_opamp":
+        variant, crossing_score, placed = _choose_opamp_variant(devices, topology)
+        floorplan_defined = True
+    else:
+        layout_map, floorplan_defined = _resolve_layout(devices, topology, device_meta)
+        placed = _place_devices(devices, layout_map, floorplan_defined=floorplan_defined)
+        crossing_score = -1
 
     max_x = max((pd.origin.x + 60 for pd in placed), default=400)
     max_y = max((pd.origin.y + 70 for pd in placed), default=300)
@@ -321,6 +448,8 @@ def build_schematic_layout(
         floorplan_defined=floorplan_defined,
         topology=topology,
         title_suffix=suffix,
+        variant=variant,
+        crossing_score=crossing_score,
     )
 
 

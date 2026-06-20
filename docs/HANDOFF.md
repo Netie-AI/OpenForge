@@ -1,11 +1,11 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (Option B locked)  
-**HEAD (local):** `a4f2c36` on `feat/schematic-orthogonal-router` (pushed)
+**Updated:** 2026-06-20 (Phase 0.8 signed off; CMRR partial; governance lock)  
+**HEAD (local):** `09fdcfe` on `feat/schematic-orthogonal-router`
 
-**Structural log:** `docs/semicon-log.md` entries 2–3 — real diff-pair amp; **iq open (Option B: honest partial on placeholder BJTs)**.
+**Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
-**Read order:** this file → `docs/STATUS.md` → `docs/PARKING_LOT.md` → `AGENT_PLAN.md` §0 → `.cursor/.skills/SKILL.md`
+**Read order:** this file → `docs/STATUS.md` → `docs/PARKING_LOT.md` → `AGENT_PLAN.md` §0 → `.cursor/skills/openforge-conventions/SKILL.md` → `.cursor/skills/mode-routing/SKILL.md`
 
 Use this file at the **start of every new Cursor window**.
 
@@ -25,10 +25,10 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **1** | **CMRR testbench** (next PVT metric) | PSRR bench landed (`scripts/verify_psrr.py`); one session — see `PARKING_LOT.md` |
-| **2** | **Phase 0.8 schematic sign-off** | `pytest tests/test_schematic_connectivity.py -v`; compare `logs/schematic_0.8_*.svg` vs 0.7 |
-| **3** | **BSIM CI job** | After Phase 3 categories honest on local BSIM — Actions still bundled-only (`STATUS.md`) |
-| **4** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
+| **1** | **BSIM CI proof on pushed HEAD** | `sky130-bsim-smoke` workflow job added; next push/PR must show Actions green with run URL in `STATUS.md` |
+| **2** | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) and keep `bench-only` until datasheet-equivalence is proven |
+| **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
+| **4** | **Schematic tangling reduction follow-up** | Keep 0.8 router path; reduce opamp `crossing_score` from 6 toward `<=3` without regressing `tests/test_schematic_connectivity.py` |
 | Parking lot | Schematic drag-reroute, vref iq architecture (Option A) | After PVT tail; see § vref decision |
 
 **Do NOT start:** Phase 4/5, LoRA, cross-repo Cursor brain, layout/DRC/LVS, PLL/SerDes/standard-cells/high-speed IO (`PARKING_LOT.md` § out of scope).
@@ -54,13 +54,14 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | Item | Notes |
 |------|-------|
 | 0.7 connectivity + IO stubs | Verifier caught 16px gap; tests 10/10 |
-| 0.8 stub-then-fold (code) | `schematic_router.py` on HEAD `065abb0`; STATUS sign-off pending |
+| 0.8 stub-then-fold sign-off | Parent + `dv-verifier` rerun complete: `pytest tests/test_schematic_connectivity.py -v` **14/14 pass**; `logs/schematic_0.8_*.svg` vs 0.7 confirms terminal-stub deltas (`0→21`, `0→20`) |
 | UI hotfix | `renderError()` restored after JS corruption |
 | Docs | `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `SESSION_NOTES.md`, etc. |
 | VCVS → real error amp | vref topology validated; **iq still open** |
-| Opamp/switch BSIM (local) | 5/5 smoke; CI gap remains |
+| BSIM smoke + CI wiring | Local rerun `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = 5/5 pass (`vref` deferred); `.github/workflows/ci.yml` now includes `sky130-bsim-smoke` job (Actions proof pending push) |
+| Schematic tangling guard | Added `openanalog/eda/schematic_geometry.py`, opamp placement-variant scoring in `schematic_layout.py`, and `tests/test_schematic_no_tangling.py` (**5 passed**). Chosen variant `tail_aligned`; `nb` x-span **300→174**; residual `crossing_score=6` still open |
 | Agentic EDA survey | `docs/research/AGENTIC_EDA_SURVEY.md` |
-| Cursor conventions | `.cursor/.skills/SKILL.md` |
+| Cursor conventions | `.cursor/skills/openforge-conventions/SKILL.md` |
 
 ---
 
@@ -74,7 +75,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | 0.5 rendering | ✅ |
 | 0.6 schematic floorplan | ✅ |
 | 0.7 connectivity verification | ✅ |
-| 0.8 gate-stub-then-fold router | ✅ code on HEAD; STATUS sign-off pending |
+| 0.8 gate-stub-then-fold router | ✅ signed off (parent + `dv-verifier` + artifact compare) |
 | CI on Linux + ngspice behavioral job | ✅ |
 
 ### Phase 1 — THE GATE (four dev-mode categories vs `spec_envelopes.py`)
@@ -143,36 +144,42 @@ python -m pytest tests/test_ngspice_behavior.py -v
 ### Closed (with evidence)
 - **0.7 verifier:** IO stubs must reach terminals; parser fix for `class="signal-wire io-stub"`; tests caught 16px gap then passed after fix.
 - **SVG emitter:** Valid CSS classes; dynamic IO stub coords; golden logs `logs/schematic_0.7_*.svg`.
-- **0.8 router (committed):** `terminal_stub()` + orthogonal routing — `logs/schematic_0.8_orthogonal_*.svg`; `verify_terminal_stubs` in connectivity tests.
+- **0.8 router + sign-off:** `terminal_stub()` + orthogonal routing — `logs/schematic_0.8_orthogonal_*.svg`; parent + `dv-verifier` rerun `pytest tests/test_schematic_connectivity.py -v` (14/14), with SVG compare showing terminal-stub markers in 0.8 only.
 - **UI hotfix:** Restored `renderError()` after JS corruption; `node --check` on embedded script.
 - **Docs:** `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `analog_design_rules.md` (stub rule), `SESSION_NOTES.md`, `VERIFY_BRIEF.md`.
 
 ### Open (real gates)
-- **PVT / testbench metrics** — **PSRR @ 100 Hz landed** (`verify_psrr.py`); opamp gap vs RS321 85 dB documented. **Next:** CMRR.
-- **Phase 0.8 STATUS sign-off** — code on branch; pytest + SVG compare pending.
-- **BSIM in CI** — local 5/5 smoke; Actions still bundled-only.
+- **PVT / testbench metrics** — **PSRR @ 100 Hz landed** (`verify_psrr.py`). **CMRR bench remains `partial`** (`verify_cmrr.py`): normalization fixed and RL fixture sanity run (`diag_opamp_cmrr_fixture.py`), but datasheet-equivalence remains unverified (see `STATUS.md` / `semicon-log.md`).
+- **BSIM in CI** — workflow wired (`sky130-bsim-smoke`), but no pushed-HEAD Actions proof URL yet.
+- **Schematic tangling residual** — placement pressure mitigation landed, but opamp `crossing_score` still 6 (target `<=3`) under current router.
 - **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint.
 
 ### Discipline reminders
 - Passing connectivity tests ≠ schematic looks good ≠ UI loads.
 - UI churn caused a startup crash — always run `UI_E2E_CHECKLIST.md` after `index.html` edits.
 - Generic external roadmaps restate `AGENT_PLAN.md` — fold to parking lot, don’t panic-replan.
+- Governance ownership lock: treat `.cursor/agents/`, `.cursor/rules/`, and `.cursor/skills/` as owner-managed; executor agents do not modify them unless explicitly instructed by owner.
+- Mode routing: composer-mode requires Claude verification before gate progression; non-composer (Codex) mode may complete locally with `dv-verifier` + parent re-run evidence.
+- Shorthand contract: user `continue` = execute next step now; user `continue and next window` = execute now and output next-window snippet (files + skills/rules + agent pipeline).
 
 ---
 
 ## Copy-paste — next **Cursor** window (executor)
 
 ```
-Read first: docs/HANDOFF.md, docs/PARKING_LOT.md (Do next only), .cursor/.skills/SKILL.md
+Read first: docs/HANDOFF.md, docs/PARKING_LOT.md (Do next only), .cursor/skills/openforge-conventions/SKILL.md, .cursor/skills/mode-routing/SKILL.md
 
 You are the executor. Do NOT expand scope.
 
 Sequence:
-1. PVT / testbench — pick one metric from PARKING_LOT § simulation (PSRR/CMRR/THD/noise); real ngspice bench + STATUS row.
-2. Phase 0.8 sign-off — pytest tests/test_schematic_connectivity.py -v; logs/schematic_0.8_*.svg vs 0.7.
-3. Optional: human tick docs/UI_E2E_CHECKLIST.md.
+1. BSIM CI proof: push/PR and record first green `sky130-bsim-smoke` Actions URL in `docs/STATUS.md`.
+2. CMRR fixture policy decision — keep bench-only until datasheet-equivalence is proven (`diag_opamp_cmrr_fixture.py` evidence already landed).
+3. Schematic tangling follow-up: keep `route_nets()` path, reduce opamp `crossing_score` from 6 toward `<=3`, preserve `tests/test_schematic_connectivity.py` green.
 
 Do NOT: vref iq sizing sweeps (Option B locked), Phase 4/5, LoRA, PLL/SerDes/vision→corpus, layout/DRC/LVS.
+Do NOT: edit `.cursor/agents`, `.cursor/rules`, `.cursor/skills` (owner-managed governance files).
+If user says "continue", execute next step now (not plan-only).
+If user says "continue and next window", execute now and finish with a concise next-window handoff snippet.
 
 Evidence: paste command output, diff, or artifact paths. Zero-trust — no "trust me" summaries.
 
@@ -191,7 +198,7 @@ You are the reviewer, not the patch author. Gate acceptance on evidence.
 This session context:
 - vref Option B locked — topology validated, iq open on placeholder BJTs; verify exits 1 on iq (honest).
 - Next engineering: PVT/testbench expansion, not vref redesign.
-- 0.8 router on branch; STATUS sign-off pending.
+- 0.8 router signed off with parent + `dv-verifier` reruns; STATUS updated with 14/14 pytest + SVG deltas.
 - PARKING_LOT: PSRR/CMRR/THD/PVT + out-of-scope (PLL/SerDes/vision→corpus).
 
 When Cursor returns work, check:
@@ -225,7 +232,7 @@ Read docs/HANDOFF.md and docs/STATUS.md first.
 Phase 1–2 closed. Phase 3: BSIM 5/5 smoke on pinned v0.13.0 (local only).
 Evidence: evidence/phase3_*_2026-06-19.log
 
-Next: vref bandgap on SKY130 BJTs; then BSIM CI job (not before local stable).
+Next (legacy note): vref bandgap on SKY130 BJTs, then BSIM CI follow-up. Current active priority is higher in this file: capture first green pushed-HEAD `sky130-bsim-smoke` Actions proof URL.
 Do NOT start Phase 4/5 or LoRA training.
 Zero-trust: done = real artifacts checked, not summaries.
 Environment: WSL Ubuntu, .venv_wsl, OPENFORGE_WSL_DISTRO=Ubuntu.
