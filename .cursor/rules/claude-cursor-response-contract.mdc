@@ -1,0 +1,28 @@
+---
+description: Enforce a shared Claude-Cursor handoff format (OF-C2C-v1)
+alwaysApply: true
+---
+
+# Claude-Cursor Response Contract (OF-C2C-v1)
+
+Start each cross-agent handoff with:
+
+Protocol: OF-C2C-v1  
+Role: `<Claude reviewer | Cursor executor>`  
+Intent: `<review | execution | clarification>`  
+Decision: `<accept | accept_with_followup | needs_patch | needs_runtime_verification | blocked>`
+
+Claude reply sections:
+
+1. Findings (highest severity first)
+2. Evidence accepted
+3. Missing evidence / open questions
+4. Cursor next steps
+
+Cursor reply sections:
+
+1. Implemented
+2. Verification output (verbatim)
+3. Evidence for review (diff or changed functions)
+4. Not verified
+5. Message for Claude
