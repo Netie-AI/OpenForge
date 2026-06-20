@@ -12,12 +12,12 @@
 
 | # | Workstream | Gate before starting |
 |---|------------|----------------------|
-| 1 | **PVT / testbench expansion** (PSRR, CMRR, THD, noise) | vref Option B locked (`HANDOFF.md`); one metric per session |
+| 1 | **CMRR testbench** (next PVT metric) | PSRR done — `scripts/verify_psrr.py`; see `STATUS.md` § PSRR |
 | 2 | **Phase 0.8 schematic sign-off** | `pytest tests/test_schematic_connectivity.py -v` |
 | 3 | **BSIM CI job** | Local BSIM stable; vref honest-partial recorded |
 | 4 | **Schematic drag-reroute + stub-then-fold verifier** | After PVT tail — do not interleave |
 
-**First metric when PVT starts (2026-06-20):** **PSRR** — highest leverage for vref + LDO (supply rejection is core to both); relatively clean AC ripple-on-VDD bench vs THD (sine + FFT) or noise (`.noise` setup). Confirm in session; don't batch all four.
+**First metric when PVT starts (2026-06-20):** **PSRR** — ✅ landed (`scripts/verify_psrr.py`, `STATUS.md`). **Next:** CMRR.
 
 ---
 
@@ -58,7 +58,7 @@ Named targets to add **when category benches exist** — not new roadmap, just e
 
 | Metric | Bench sketch | Categories | Phase | After |
 |--------|--------------|------------|-------|-------|
-| **PSRR** | Small ripple on `VDD`, AC measure `Vout/VDD` (or LDO-specific PSRR deck) | opamp, ldo, vref | 3-tail | vref iq; BSIM stable |
+| **PSRR** | Small ripple on `VDD`, AC measure `Vout/VDD` at 100 Hz | opamp, ldo, vref | 3-tail | ✅ bench in `verify_psrr.py`; **not in fitness gate**; opamp gap vs RS321 85 dB |
 | **CMRR** | Common-mode step or AC on both inputs; measure differential rejection | opamp, comparator | 3-tail | opamp AC bench solid |
 | **THD / SFDR** | Sinusoidal input, `.fft` or harmonic power ratio | opamp, multiplier (if productized) | 4+ | linearity spec in envelope |
 | **Line / load regulation** | Already partial (LDO/vref); unify reporting in compliance table | ldo, vref | 3 | vref iq |

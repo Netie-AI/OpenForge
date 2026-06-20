@@ -95,6 +95,24 @@ meas ac ph_ugf   find vp(vout) when vdb(vout)=0
     return "* OpenForge op-amp AC\n" + ms.block + _params_block(p, supply_V, cload_F) + _core(ms) + harness
 
 
+def _build_psrr_deck(p: OpAmpParams, supply_V: float, cload_F: float) -> str:
+    """PSRR: 100 mVpp ripple on VDD, inputs at VCM, measure vout at 100 Hz."""
+    ms = resolve_models()
+    core = _core(ms).replace("VSUP vdd 0 {VDD}", "VSUP vdd 0 dc {VDD} ac 0.1")
+    harness = """
+Vcm  vinn 0 {VCM}
+Vinp vinp 0 {VCM}
+.control
+set filetype=ascii
+op
+ac dec 30 10 1Meg
+meas ac psrr_db find vdb(vout) at=100
+.endc
+.end
+"""
+    return "* OpenForge op-amp PSRR\n" + ms.block + _params_block(p, supply_V, cload_F) + core + harness
+
+
 def _build_tran_deck(p: OpAmpParams, supply_V: float, cload_F: float) -> str:
     vcm = supply_V / 2.0
     lo, hi = max(0.1, vcm - 0.25), min(supply_V - 0.1, vcm + 0.25)
@@ -116,7 +134,7 @@ meas tran tr_rise trig v(vout) val={lo + 0.1 * (hi - lo)} rise=1 targ v(vout) va
 class OpAmpTopology(Topology):
     circuit_type = "opamp"
     topology_name = "two_stage_miller_opamp"
-    spec_weights = {"pm_deg": 2.0, "gbp_MHz": 1.5, "aol_dB": 1.5, "slew_Vus": 2.0, "iq_uA": 1.0}
+    spec_weights = {"pm_deg": 2.0, "gbp_MHz": 1.5, "aol_dB": 1.5, "slew_Vus": 2.0, "iq_uA": 1.0, "psrr_dB": 0.3}
 
     def default_params(self) -> OpAmpParams:
         return OpAmpParams()
@@ -130,7 +148,7 @@ class OpAmpTopology(Topology):
         }
 
     def measurable_specs(self) -> set[str]:
-        return {"aol_dB", "gbp_MHz", "pm_deg", "iq_uA", "slew_Vus"}
+        return {"aol_dB", "gbp_MHz", "pm_deg", "iq_uA", "slew_Vus", "psrr_dB"}
 
     def estimate_extra(self, params: OpAmpParams, *, cload_F: float = 10e-12) -> dict[str, float]:
         i_tail = params.Iref * (params.W5 / params.Wb) * (params.Lb / params.L5)
@@ -166,6 +184,14 @@ class OpAmpTopology(Topology):
             tr = grab_meas("tr_rise", tout)
             if tok and tr and tr > 0:
                 m.values["slew_Vus"] = (0.8 * 0.5) / (tr * 1e6)
+            ok_psrr, raw_psrr = run_ngspice(
+                _build_psrr_deck(params, supply_V, cload_F), timeout=max(NGSPICE_TIMEOUT, 15)
+            )
+            if ok_psrr:
+                m.raw += "\n" + raw_psrr[-2000:]
+                psrr = grab_meas("psrr_db", raw_psrr)
+                if psrr is not None:
+                    m.values["psrr_dB"] = abs(psrr)
         m.ok = all(m.values.get(k) is not None for k in ("aol_dB", "gbp_MHz", "pm_deg"))
         return m
 

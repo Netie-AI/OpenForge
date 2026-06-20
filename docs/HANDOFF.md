@@ -25,8 +25,8 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **1** | **PVT / testbench expansion** | First metric likely **PSRR** (`PARKING_LOT.md`) — one bench per session; benefits vref/LDO/opamp/comparator. |
-| **2** | **Phase 0.8 schematic sign-off** | `pytest tests/test_schematic_connectivity.py -v`; compare `logs/schematic_0.8_*.svg` vs 0.7; update STATUS 0.8 row |
+| **1** | **CMRR testbench** (next PVT metric) | PSRR bench landed (`scripts/verify_psrr.py`); one session — see `PARKING_LOT.md` |
+| **2** | **Phase 0.8 schematic sign-off** | `pytest tests/test_schematic_connectivity.py -v`; compare `logs/schematic_0.8_*.svg` vs 0.7 |
 | **3** | **BSIM CI job** | After Phase 3 categories honest on local BSIM — Actions still bundled-only (`STATUS.md`) |
 | **4** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
 | Parking lot | Schematic drag-reroute, vref iq architecture (Option A) | After PVT tail; see § vref decision |
@@ -148,7 +148,7 @@ python -m pytest tests/test_ngspice_behavior.py -v
 - **Docs:** `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `analog_design_rules.md` (stub rule), `SESSION_NOTES.md`, `VERIFY_BRIEF.md`.
 
 ### Open (real gates)
-- **PVT / testbench metrics** — PSRR, CMRR, THD, noise; first new capability after vref Option B lock.
+- **PVT / testbench metrics** — **PSRR @ 100 Hz landed** (`verify_psrr.py`); opamp gap vs RS321 85 dB documented. **Next:** CMRR.
 - **Phase 0.8 STATUS sign-off** — code on branch; pytest + SVG compare pending.
 - **BSIM in CI** — local 5/5 smoke; Actions still bundled-only.
 - **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint.

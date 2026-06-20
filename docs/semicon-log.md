@@ -158,3 +158,29 @@ Is the iq gap closable by **error-amp bias sizing alone**, or is the real diff-p
 
 - `scripts/diag_vref_iq_breakdown.py`
 - `scripts/verify_phase3_vref.py` (end-to-end; exit 1 on iq)
+
+---
+
+## Entry 4 — PSRR @ 100 Hz bench (2026-06-20)
+
+**Status:** bench landed — **not** added to `DEV_MODE_SPECS` fitness gate yet.
+
+### Pattern
+
+AC ripple on supply (`dc VDD ac 0.1`), inputs at bias (opamp: VCM; LDO: closed loop; vref: bandgap output), `meas ac psrr_db find vdb(node) at=100`. Same pattern as existing LDO `_build_ac_deck`.
+
+### Results (`scripts/verify_psrr.py`)
+
+| Category | psrr_dB (defaults) | psrr_dB (sized) | vs product |
+|----------|-------------------|-----------------|------------|
+| opamp | 20.0 | 54.7 (s42) | RS321 typ 85 dB — **open** |
+| ldo | 102.7 | 110.3 (s7) | strong |
+| vref | 86.1 | — | iq still Option B |
+
+**Interpretation:** PSRR infrastructure works. Opamp PSRR is a real gap (not a bench bug) — separate from RS321 AOL/GBP/PM gate. Do not add loose PSRR to fitness without closing the gap or documenting honest partial.
+
+### Evidence
+
+- `openanalog/forge/topologies/opamp.py` — `_build_psrr_deck`
+- `openanalog/forge/topologies/vref.py` — `_build_psrr_deck`
+- `scripts/verify_psrr.py`

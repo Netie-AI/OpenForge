@@ -155,6 +155,30 @@ meas dc tempco pp v(vref)
     return ms.block + _params_block(p, supply_V) + body
 
 
+def _build_psrr_deck(p: VRefParams, supply_V: float) -> str:
+    """AC PSRR: 100 mVpp ripple on VDD, measure vref at 100 Hz (bundled LDO pattern)."""
+    ms = resolve_models()
+    body = f"""
+* OpenForge bandgap PSRR
+Vsup vdd 0 dc {supply_V} ac 0.1
+{_error_amp(ms)}{_ptat_mirror(ms, mirror_w=f"{p.mirror_w_um}u")}
+Q1 0 0 qp1 0 {ms.pnp} area=1
+Q2 0 0 qp2 0 {ms.pnp} area=8
+Q3 0 0 qp3 0 {ms.pnp} area=1
+Rptat ra1 qp2 {{RPTAT}}
+Rscale vref qp3 {{RSCALE}}
+Cout vref 0 10p
+.control
+set filetype=ascii
+op
+ac dec 30 10 1Meg
+meas ac psrr_db find vdb(vref) at=100
+.endc
+.end
+"""
+    return ms.block + _params_block(p, supply_V) + body
+
+
 def _comment_spice_control_block(deck: str) -> str:
     """Comment .control … .endc for schematic export (meas/print lines are not devices)."""
     out: list[str] = []
@@ -178,7 +202,7 @@ def _comment_spice_control_block(deck: str) -> str:
 class VRefTopology(Topology):
     circuit_type = "vref"
     topology_name = "sky130_bandgap"
-    spec_weights = {"vref_V": 2.0, "line_reg_mV": 1.5, "tempco_ppm": 1.0, "iq_uA": 1.0}
+    spec_weights = {"vref_V": 2.0, "line_reg_mV": 1.5, "tempco_ppm": 1.0, "iq_uA": 1.0, "psrr_dB": 0.4}
 
     def default_params(self) -> VRefParams:
         return VRefParams()
@@ -192,7 +216,7 @@ class VRefTopology(Topology):
         }
 
     def measurable_specs(self) -> set[str]:
-        return {"vref_V", "line_reg_mV", "tempco_ppm", "iq_uA"}
+        return {"vref_V", "line_reg_mV", "tempco_ppm", "iq_uA", "psrr_dB"}
 
     def measure(
         self, params: VRefParams, *, supply_V: float = 5.0, cload_F: float = 10e-12, with_full: bool = True
@@ -219,6 +243,15 @@ class VRefTopology(Topology):
         m.values["iq_uA"] = abs(iq) * 1e6 if iq else None
         if tempco is not None and vref:
             m.values["tempco_ppm"] = abs(tempco / vref) * 1e6
+        if with_full:
+            ok_psrr, raw_psrr = run_ngspice(
+                _build_psrr_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 30)
+            )
+            if ok_psrr:
+                m.raw += "\n" + raw_psrr[-1500:]
+                psrr = grab_meas("psrr_db", raw_psrr)
+                if psrr is not None:
+                    m.values["psrr_dB"] = abs(psrr)
         m.ok = vref is not None and 1.18 <= vref <= 1.22
         return m
 

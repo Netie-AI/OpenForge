@@ -119,6 +119,18 @@ All four have named behavioral tests in CI. Run `make smoke-wsl` on pushed HEAD 
 
 Reproduce: `python scripts/verify_phase2.py` (WSL, ngspice on PATH).
 
+## PVT / testbench — PSRR @ 100 Hz (2026-06-20)
+
+**Bench:** AC ripple on supply (`ac 0.1` on VDD/Vin), `meas ac psrr_db find vdb(vout|vref) at=100`. Implemented in `opamp.py`, `ldo.py` (pre-existing), `vref.py`. **Not yet in `DEV_MODE_SPECS`** — measurement-only until envelope gate added.
+
+| Category | Defaults | Sized | Datasheet ref | Notes |
+|----------|----------|-------|---------------|-------|
+| opamp (bundled) | **20.0 dB** | **54.7 dB** (seed=42) | RS321 typ **85 dB** | PSRR deck added; defaults weak — sizing helps but **does not close** RS321 PSRR bar |
+| ldo (bundled) | **102.7 dB** | **110.3 dB** (seed=7) | ~60 dB floor (informative) | Pre-existing `_build_ac_deck`; strong rejection |
+| vref (SKY130 L1 BJT placeholders) | **86.1 dB** | — | line_reg 1.3 mV (DC) | AC PSRR ~86 dB at 100 Hz; iq still open (Option B) |
+
+Reproduce: `python scripts/verify_psrr.py` (WSL). **Next metric (one session):** CMRR — see `PARKING_LOT.md`.
+
 ## Phase 0 — Infrastructure (2026-06-17)
 
 | Item | Status | Notes |
