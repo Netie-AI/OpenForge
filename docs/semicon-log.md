@@ -251,12 +251,13 @@ Parallel to PSRR W3 sweep — sweep tail (M5) and bias mirror (M8 on `nb`) geome
 
 | Sweep | CMRR range (open-loop) | CMRR range (rl10k) | Notes |
 |-------|------------------------|--------------------|-------|
-| **Lb (M8)** 0.5→8 µm | **159.5 → 125.5 dB** | 137.6 → 118.6 dB | **Strongest causal knob** — shorter Lb inflates CMRR; rl10k gap narrows at long Lb |
+| **Lb (M8)** 0.5→8 µm (bundled) | **159.5 → 125.5 dB** | 137.6 → 118.6 dB | **Strongest causal knob** — shorter Lb inflates CMRR; rl10k gap narrows at long Lb |
+| **Lb (M8)** 0.5→8 µm (**sky130/BSIM**) | **168.4 → 135.7 dB** | 142.8 → 128.1 dB | Same Lb causality on BSIM; **more** inflated at short Lb than bundled L1 (168.4 vs 159.5 @ Lb=0.5) |
 | L5 (M5 tail) 0.5→8 µm | 142.7 → 156.4 dB | 119.1 → 147.1 dB | Non-monotonic open-loop; **rl10k rises with L5** (opposite trend) |
 | W5 (M5 tail) 4→64 µm | 142.7 → 155.2 dB | 119.1 → 134.7 dB | Weak / non-monotonic |
 | W3 (PMOS load) 8→150 µm | 143.4 → 162.8 dB | 127.4 → 152.3 dB | PSRR tracks W3 (20→83 dB); CMRR moves less consistently |
 
-**Interpretation:** Bundled level-1 models likely give unrealistically high output impedance on the M8 bias stack (short Lb → CMRR inflated toward 160 dB). The loaded fixture is consistently more pessimistic (~15–25 dB on defaults) but still far above RS321 typ 80 dB — so neither fixture is datasheet-validated yet. **Do not lock production-fixture policy** until equivalence is proven (same discipline as pre–Option B vref iq).
+**Interpretation:** **Lb** (M8 bias stack Ro) is causally confirmed on both bundled L1 and SKY130 BSIM — shorter Lb inflates CMRR. The prior “bundled-model-only artifact” hypothesis is **refuted**: BSIM is **worse** at short Lb (168.4 dB vs 159.5 dB @ Lb=0.5). PSRR stays flat **20.0 dB** across the BSIM Lb sweep while CMRR remains 136–168 dB — same internal inconsistency as bundled. The loaded fixture is consistently more pessimistic (~15–25 dB on bundled defaults) but still far above RS321 typ 80 dB — so neither fixture is datasheet-validated yet. **Do not lock production-fixture policy** until equivalence is proven (same discipline as pre–Option B vref iq). Next axis: why open-loop CM drive yields ACM so small that normalized CMRR lands 55–88 dB above datasheet; RS321 RL=10k feedback fixture may be required before envelope compare.
 
 ### Fixture sanity (`scripts/diag_opamp_cmrr_fixture.py`)
 
@@ -271,11 +272,11 @@ Interpretation: RL materially changes measured CMRR but still leaves values far 
 
 ### Decision
 
-CMRR bench is measurable and normalization-corrected, but **not closed**. 152 dB open-loop magnitude is not physically credible for this topology on bundled models; tail/bias Ro (especially M8 **Lb**) is the leading causal hypothesis. Remains bench-only until fixture-equivalence is explicitly resolved. **No production-fixture policy lock.**
+CMRR bench is measurable and normalization-corrected, but **not closed**. 152 dB open-loop magnitude is not physically credible for this topology on bundled or BSIM models; tail/bias Ro (especially M8 **Lb**) is confirmed causal but does not bring numbers toward RS321 typ 80 dB. Remains bench-only until fixture-equivalence is explicitly resolved. **No production-fixture policy lock.**
 
 ### Evidence
 
 - `openanalog/forge/topologies/opamp.py` — `_build_cmrr_deck`, `aol_db_100`, and `cmrr_dB` wiring
 - `scripts/verify_cmrr.py`
-- `scripts/diag_opamp_cmrr_breakdown.py`
+- `scripts/diag_opamp_cmrr_breakdown.py` — `--lb-only` for BSIM follow-up; `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/diag_opamp_cmrr_breakdown.py --lb-only` (parent + dv-verifier rerun 2026-06-20)
 - `scripts/diag_opamp_cmrr_fixture.py`

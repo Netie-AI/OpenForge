@@ -2,6 +2,9 @@
 """Diagnose opamp CMRR: tail Ro / mirror load vs measured CMRR (parallel to PSRR W3 sweep)."""
 from __future__ import annotations
 
+import argparse
+import os
+
 from openanalog.forge.sizer import size
 from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
 from openanalog.forge.topologies.base import grab_meas, run_ngspice
@@ -12,6 +15,15 @@ from openanalog.forge.topologies.opamp import (
     _build_cmrr_deck,
 )
 from openanalog.interface.datasheet import parse_inline_spec
+from openanalog.sim.models import resolve_models
+
+
+def _model_label() -> str:
+    rm = resolve_models()
+    if rm.model_set == "sky130":
+        card = os.getenv("OPENFORGE_SKY130_CARD", "level1")
+        return f"sky130/{card}"
+    return rm.model_set
 
 
 def _cmrr_with_fixture(p: OpAmpParams, *, rl_ohm: float | None) -> float | None:
@@ -46,10 +58,24 @@ def _row(label: str, p: OpAmpParams, topo: OpAmpTopology) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Opamp CMRR causal sweeps")
+    parser.add_argument(
+        "--lb-only",
+        action="store_true",
+        help="Run only M8 Lb sweep (BSIM follow-up)",
+    )
+    args = parser.parse_args()
+
     topo = OpAmpTopology()
     spec = parse_inline_spec(DEV_MODE_SPECS["opamp"])
-    print("RS321 CMRR typ=80 dB — tail Ro / mirror causal sweeps (bundled models)")
+    label = _model_label()
+    print(f"RS321 CMRR typ=80 dB — tail Ro / mirror causal sweeps ({label} models)")
     print(f"{'case':14} {'cmrr':>12}  {'rl10k':>12}  {'psrr':>12}  {'aol':>10}")
+    if args.lb_only:
+        print("\n--- bias mirror M8 on nb: Lb sweep ---")
+        for lb in (0.5, 1.0, 2.0, 4.0, 8.0):
+            _row(f"Lb={lb:g}", OpAmpParams(Lb=lb), topo)
+        return 0
     cases = [
         ("defaults", OpAmpParams()),
         ("Cc_10p", OpAmpParams(Cc=10e-12)),

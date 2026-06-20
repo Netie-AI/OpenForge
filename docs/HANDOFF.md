@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (CMRR tail/bias sweep; policy lock reverted; BSIM CI blocked on PR)  
-**HEAD (local):** `85a8d51` on `feat/schematic-orthogonal-router` (pushed; doc/script commit pending)
+**Updated:** 2026-06-20 (CMRR BSIM Lb sweep; bundled-only artifact refuted; BSIM CI blocked on PR)  
+**HEAD (local):** `d41d03a` on `feat/schematic-orthogonal-router` (pushed)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
@@ -26,7 +26,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | Priority | Task | Gate |
 |----------|------|------|
 | **1** | **BSIM CI proof via PR** | Commits `ef43ef6`/`a8e8097`/`85a8d51` pushed; local WSL BSIM smoke **5/5** re-verified at `85a8d51`. **Blocker:** no open PR (`gh` not authenticated); GitHub API still shows **0** PR runs on this branch. Open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
-| **2** | **CMRR causal diagnosis (open)** | Tail/bias sweep landed (`diag_opamp_cmrr_breakdown.py`): **Lb** (M8 on `nb`) is strongest knob — Lb 0.5→8 µm drops CMRR **159.5→125.5 dB** (open-loop) and narrows rl10k gap. **152 dB open-loop still implausible** vs RS321 typ 80 dB. **No production-fixture policy** until datasheet-equivalence proven. RL=10k remains diagnostic only |
+| **2** | **CMRR causal diagnosis (open)** | Bundled Lb sweep: **159.5→125.5 dB** (0.5→8 µm). **BSIM Lb sweep done** (`--lb-only`): **168.4→135.7 dB** open-loop — Lb causal on BSIM but **more** inflated at short Lb; bundled-only artifact hypothesis **refuted**. PSRR flat 20 dB across BSIM Lb sweep. **152–168 dB still implausible** vs RS321 typ 80 dB. **No production-fixture policy** until datasheet-equivalence proven. RL=10k remains diagnostic only. Next: RS321 feedback fixture / ACM deck review |
 | **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
 | **4** | **Schematic tangling reduction follow-up** | Cherry-pick **landed** (`ef43ef6`); `tail_aligned` variant, `nb` x-span **300→174**, `crossing_score=6` (partial). Next: Cc passive tap second pass; keep `route_nets()` + connectivity **14/14** |
 | Parking lot | Generative layout pilot (ALIGN/MAGICAL) | Phase 7+ — see `docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md`; after BSIM CI PR |
@@ -60,6 +60,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | VCVS → real error amp | vref topology validated; **iq still open** |
 | BSIM smoke + CI wiring | Local rerun at `85a8d51`: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = **5/5 pass** (`vref` deferred); `.github/workflows/ci.yml` includes `sky130-bsim-smoke` job — **Actions URL not verified** (needs PR; branch has no PR runs yet) |
 | CMRR tail/bias sweep | `diag_opamp_cmrr_breakdown.py` rerun: Lb sweep **159.5→125.5 dB** (0.5→8 µm); rl10k fixture **15–25 dB** below open-loop on defaults. Policy lock **reverted** — fixture decision held until causal story + datasheet equivalence |
+| CMRR BSIM Lb sweep | `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim … --lb-only`: **168.4→135.7 dB**; bundled-only artifact **refuted**; parent + dv-verifier exact match |
 | Schematic tangling guard | Added `openanalog/eda/schematic_geometry.py`, opamp placement-variant scoring in `schematic_layout.py`, and `tests/test_schematic_no_tangling.py` (**5 passed**). Chosen variant `tail_aligned`; `nb` x-span **300→174**; residual `crossing_score=6` still open |
 | Agentic EDA survey | `docs/research/AGENTIC_EDA_SURVEY.md` |
 | Cursor conventions | `.cursor/skills/openforge-conventions/SKILL.md` |
