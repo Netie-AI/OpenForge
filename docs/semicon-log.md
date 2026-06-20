@@ -282,15 +282,28 @@ Claude reviewer gate before further sweeps: confirm CM-AC output is real signal,
 | 0.5 | BSIM | **46.9 µV** | yes | yes | Real signal |
 | 8.0 | BSIM | **185 µV** | yes | yes | Real signal |
 
-Harness confirmed: `Vinp vinp 0 dc {VCM} ac 0.1`, `Vinn vinn 0 dc {VCM} ac 0.1` — both nodes at **0.1000 V** magnitude, **-20.0 dB**, **0° phase delta** at 100 Hz. **Noise-floor hypothesis refuted** (acm_vm ≫ 1 nV). Lb sweep Δ pattern is real ACM variation, not simulator floor division. Remaining gap vs RS321 typ 80 dB is **not** explained by near-zero ACM — next axis: feedback/fixture equivalence (RL=10k harness matching datasheet conditions).
+Harness confirmed: `Vinp vinp 0 dc {VCM} ac 0.1`, `Vinn vinn 0 dc {VCM} ac 0.1` — both nodes at **0.1000 V** magnitude, **-20.0 dB**, **0° phase delta** at 100 Hz. **Noise-floor hypothesis refuted** (acm_vm ≫ 1 nV). Lb sweep Δ pattern is real ACM variation, not simulator floor division. **dv-verifier** independent rerun (bundled + BSIM): exact match on all cited rows (2026-06-20).
+
+**Trend decomposition (Lb=0.5→8 bundled):** CMRR drop **~34 dB** splits into **~22 dB AOL rolloff** + **~12 dB rising CM gain** — coherent circuit behavior, not measurement noise.
+
+### Structural mismatch ceiling (Option B framing, 2026-06-20)
+
+Real datasheet CMRR (RS321 typ **80 dB**) is overwhelmingly **mismatch-limited** in silicon — ΔVth on the input pair, current-factor mismatch, mirror imbalance. The current deck has **zero intentional mismatch** (every device pair exactly matched by construction). Open-loop vs feedback fixture changes *how* CMRR is measured, but does **not** inject the dominant real-world error mechanism.
+
+| Axis | Expected contribution | Status |
+|------|----------------------|--------|
+| RL=10k feedback fixture | May move CMRR **~10–15 dB** (legitimate next experiment) | queued — `diag_opamp_cmrr_fixture.py` path |
+| Mismatch / Monte Carlo | Dominant residual vs datasheet typ | **not in deck** — Phase 4+ per `PARKING_LOT.md` § Monte Carlo mismatch |
+
+**Do not grade fixture work as failure** if it only closes 10–15 dB instead of the full **55 dB** gap (BSIM Lb=8 **135.7 dB** vs typ **80 dB**). Document any remaining gap as **structural ceiling — no mismatch modeling in current deck**, same discipline as vref iq (Option B honest partial). **Do not start Monte Carlo now** (gated on single-corner stability).
 
 ### Decision
 
-CMRR bench is measurable and normalization-corrected, but **not closed**. 152 dB open-loop magnitude is not physically credible for this topology on bundled or BSIM models; tail/bias Ro (especially M8 **Lb**) is confirmed causal but does not bring numbers toward RS321 typ 80 dB. Remains bench-only until fixture-equivalence is explicitly resolved. **No production-fixture policy lock.**
+CMRR bench is measurable and normalization-corrected, but **not closed** — **Option B honest partial** (bench-only, not in `DEV_MODE_SPECS`). Noise-floor refuted; Lb causal on bundled + BSIM; magnitude gap vs RS321 typ likely dominated by **missing mismatch modeling**, not fixable by fixture topology alone. Run RL=10k feedback fixture experiment once; then stop chasing the gap until Monte Carlo lands. **No production-fixture policy lock.**
 
 ### Evidence
 
 - `openanalog/forge/topologies/opamp.py` — `_build_cmrr_deck`, `aol_db_100`, and `cmrr_dB` wiring
 - `scripts/verify_cmrr.py`
 - `scripts/diag_opamp_cmrr_breakdown.py` — `--lb-only` for BSIM follow-up; `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/diag_opamp_cmrr_breakdown.py --lb-only` (parent + dv-verifier rerun 2026-06-20)
-- `scripts/diag_opamp_cmrr_acm_floor.py` — raw `acm_vm` + input stimulus probe (parent rerun 2026-06-20)
+- `scripts/diag_opamp_cmrr_acm_floor.py` — raw `acm_vm` + input stimulus probe (parent + **dv-verifier** exact-match rerun 2026-06-20)
