@@ -1,7 +1,8 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (schematic passive tap 6→3; CMRR parked)  
-**HEAD (local):** `a793e2f` on `feat/schematic-orthogonal-router` (pushed)
+**Updated:** 2026-06-20 (BSIM CI green on PR #1; schematic tangling ≤3)  
+**HEAD (local):** `55ff958` on `feat/schematic-orthogonal-router` (pushed)  
+**PR:** [#1](https://github.com/Netie-AI/OpenForge/pull/1) — Actions [#27875600582](https://github.com/Netie-AI/OpenForge/actions/runs/27875600582) green
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
@@ -25,7 +26,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **1** | **BSIM CI proof via PR** | Commits `ef43ef6`/`a8e8097`/`85a8d51` pushed; local WSL BSIM smoke **5/5** re-verified at `85a8d51`. **Blocker:** no open PR (`gh` not authenticated); GitHub API still shows **0** PR runs on this branch. Open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
+| **1** | ~~**BSIM CI proof via PR**~~ | **Done 2026-06-20:** [PR #1](https://github.com/Netie-AI/OpenForge/pull/1); [Actions #27875600582](https://github.com/Netie-AI/OpenForge/actions/runs/27875600582) — `sky130-bsim-smoke` + `test` **pass** |
 | **2** | **CMRR — parked (Option B honest partial)** | RL=10k fixture run complete (dv-verifier confirmed): **152.0→127.4 dB** (−24.6 dB, CM-path only); **47 dB above** RS321 typ. **Stop CMRR churn** until Monte Carlo Phase 4+. |
 | **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
 | **4** | ~~**Schematic tangling — Cc passive tap**~~ | **Done 2026-06-20:** `schematic_router.py` passive second pass; **`crossing_score` 6→3**; pytest **19/19** |

@@ -26,9 +26,27 @@ Do not run `cursor-executor` in parallel with any other writing agent; only one 
 
 Use composer-fast defaults for parallel-safe exploratory streams, then require `dv-verifier` blocking evidence before any gate claim.
 
+## Parent mode routing
+
+Use the parent model tier to decide collaboration mode:
+
+| Parent mode | Default subagent model | Gate behavior |
+|---|---|---|
+| **Composer parent** | `composer-2.5-fast` | Must package OF-C2C + Evidence Bundle and send to Claude reviewer before advancing gate-critical claims |
+| **Non-composer parent** (e.g. Codex high) | `inherit` allowed, or explicit composer override | Cursor can complete executor + `dv-verifier` + parent re-run locally; external Claude review optional unless user asks |
+| **Ask/read-only parent** | read-only only | No writing agent (`cursor-executor`) unless parent explicitly switches to writing-capable mode |
+
+## Gate-critical trigger definition
+
+Treat work as gate-critical if any is true:
+- changes `docs/STATUS.md` gate rows or claims phase status change,
+- uses `scripts/verify_phase*.py`, `verify_cmrr.py`, `verify_psrr.py`, or equivalent acceptance script,
+- reports `meets_all` as acceptance evidence,
+- introduces/changes a testbench metric intended for envelope decisions.
+
 ## Autonomy and reversibility
 
-Cursor may orchestrate, research, and scale work without waiting for Claude sign-off at every step. The loop is: arrange -> research/propose (parallel, cheap, Composer-fine) -> Claude review -> approve -> execute -> report back. Sign-off is required before a writing step is trusted, not before research or proposal work runs. Scale the research side freely.
+Cursor may orchestrate, research, and scale work without waiting for Claude sign-off at every step. Composer-mode flows still require Claude verification before gate progression; non-composer local flows may close locally with `dv-verifier` + parent re-run evidence.
 
 **Git reversibility is necessary, not sufficient. Do not treat "it can be reverted" as equivalent to "it is safe."** Reversibility answers whether a bad commit can be undone. It does not answer:
 
@@ -38,10 +56,18 @@ Cursor may orchestrate, research, and scale work without waiting for Claude sign
 
 **Model tiering (default, override logged explicitly if changed):**
 
-- **Composer-class (`composer-2.5-fast`) for all subagents** — proposers, research, `cursor-executor`, and the single blocking gate `dv-verifier`. One extra parent re-run of verify commands after subagents return; do not trust subagent stdout alone.
+- **Composer-class (`composer-2.5-fast`) is default for composer-mode orchestration** — proposers, research, `cursor-executor`, and the single blocking gate `dv-verifier`. One extra parent re-run of verify commands after subagents return; do not trust subagent stdout alone.
 - **`local-reviewer`** — optional pre-filter only; not a second blocking gate. Default stack: executor → `dv-verifier` → parent re-run.
 - **`session-scribe`** — background Composer; writes `docs/research/testbench_learnings/` only after gate runs.
-- **Parent / human review** — strongest model when orchestrating or closing phase gates. Record decisions in testbench learnings when parent tier differs from Composer subagents.
-- Override stronger subagent models only with explicit logged reason in HANDOFF — not default drift.
+- **Parent / human review** — strongest model when orchestrating or closing phase gates. In composer-mode, Claude verification is mandatory before gate progression. Record decisions in testbench learnings when parent tier differs from composer subagents.
+- Override non-default subagent models only with explicit logged reason in HANDOFF — not default drift.
 
-Scale parallel research freely. Keep the write step single-threaded, Composer-tier, gated on `dv-verifier` + parent re-run before any result is treated as real.
+Scale parallel research freely. Keep the write step single-threaded, gated on `dv-verifier` + parent re-run before any result is treated as real.
+
+## GitHub PR / CI (when push granted)
+
+When the user grants push permission for a gate-closing branch:
+- Cursor may `git push` and open or update a PR via `gh` **without re-confirming each step**.
+- Load `GITHUB_TOKEN` from gitignored `env.local` into `GH_TOKEN` for `gh` — **never commit, echo, or paste tokens** (`env.local` is in `.gitignore`).
+- Default repo: `Netie-AI/OpenForge` (match remote casing; not `Netie-Ai`).
+- After PR opens, check `gh pr checks`; log green `sky130-bsim-smoke` Actions run URL in `docs/STATUS.md` before claiming BSIM CI closed.

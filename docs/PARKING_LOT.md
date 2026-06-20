@@ -12,7 +12,7 @@
 
 | # | Workstream | Gate before starting |
 |---|------------|----------------------|
-| 1 | **BSIM CI proof via PR** | `85a8d51` pushed (`ef43ef6` + doc sync); local BSIM smoke **5/5** at HEAD; branch still has **0** PR workflow runs. Open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and capture green `sky130-bsim-smoke` Actions URL in `STATUS.md` |
+| 1 | ~~**BSIM CI proof via PR**~~ | **Done 2026-06-20:** [PR #1](https://github.com/Netie-AI/OpenForge/pull/1); Actions [#27875600582](https://github.com/Netie-AI/OpenForge/actions/runs/27875600582) green |
 | 2 | ~~**CMRR fixture equivalence evidence**~~ | **Parked 2026-06-20 (Option B).** RL=10k run: 152.0→127.4 dB (−24.6 dB); still 47 dB above RS321 typ 80 dB. Mismatch ceiling documented — resume only when Monte Carlo Phase 4+ lands |
 | 3 | ~~**Schematic tangling — Cc passive tap**~~ | **Done 2026-06-20:** `route_nets()` passive second pass; `crossing_score` **6→3**; pytest **19/19** |
 
