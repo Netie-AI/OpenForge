@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (BSIM CI wired; tangling guard landed; Actions proof pending PR)  
-**HEAD (local):** `ef43ef6` on `feat/schematic-orthogonal-router` (pushed)
+**Updated:** 2026-06-20 (BSIM CI wired; tangling guard landed; Actions proof blocked on PR)  
+**HEAD (local):** `a8e8097` on `feat/schematic-orthogonal-router` (pushed; `ef43ef6` + doc sync commit)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
@@ -25,7 +25,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **1** | **BSIM CI proof via PR** | Commit `ef43ef6` pushed; `.github/workflows/ci.yml` triggers on `main`/`master` push + `pull_request` only — open PR from `feat/schematic-orthogonal-router` and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
+| **1** | **BSIM CI proof via PR** | Commits `ef43ef6`/`a8e8097` pushed; local WSL BSIM smoke **5/5** re-verified at `a8e8097`. **Blocker:** no open PR (`gh` not authenticated); open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
 | **2** | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) and keep `bench-only` until datasheet-equivalence is proven |
 | **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
 | **4** | **Schematic tangling reduction follow-up** | Keep `route_nets()` path; next cut: passive tap routing for Cc (`vout`/`nout1`) and tighten crossing gate toward `<=3`; current `tail_aligned` variant, `nb` x-span **300→174**, `crossing_score=6` |
@@ -58,7 +58,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | UI hotfix | `renderError()` restored after JS corruption |
 | Docs | `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `SESSION_NOTES.md`, etc. |
 | VCVS → real error amp | vref topology validated; **iq still open** |
-| BSIM smoke + CI wiring | Local rerun `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = 5/5 pass (`vref` deferred); `.github/workflows/ci.yml` now includes `sky130-bsim-smoke` job (Actions proof pending push) |
+| BSIM smoke + CI wiring | Local rerun at `a8e8097`: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = **5/5 pass** (`vref` deferred); `.github/workflows/ci.yml` includes `sky130-bsim-smoke` job — **Actions URL not verified** (needs PR; `gh auth login` unavailable this session) |
 | Schematic tangling guard | Added `openanalog/eda/schematic_geometry.py`, opamp placement-variant scoring in `schematic_layout.py`, and `tests/test_schematic_no_tangling.py` (**5 passed**). Chosen variant `tail_aligned`; `nb` x-span **300→174**; residual `crossing_score=6` still open |
 | Agentic EDA survey | `docs/research/AGENTIC_EDA_SURVEY.md` |
 | Cursor conventions | `.cursor/skills/openforge-conventions/SKILL.md` |
@@ -150,7 +150,7 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ### Open (real gates)
 - **PVT / testbench metrics** — **PSRR @ 100 Hz landed** (`verify_psrr.py`). **CMRR bench remains `partial`** (`verify_cmrr.py`): normalization fixed and RL fixture sanity run (`diag_opamp_cmrr_fixture.py`), but datasheet-equivalence remains unverified (see `STATUS.md` / `semicon-log.md`).
-- **BSIM in CI** — `sky130-bsim-smoke` job committed at `ef43ef6`; local WSL smoke **5/5**; **Actions URL not verified** (feature-branch push does not trigger workflow — needs PR).
+- **BSIM in CI** — `sky130-bsim-smoke` job at `ef43ef6`; doc sync `a8e8097` pushed; local WSL smoke **5/5** at `a8e8097`; **Actions URL not verified** (workflow runs on PR only — open compare link above).
 - **Schematic tangling residual** — `tests/test_schematic_no_tangling.py` **5/5**; chosen variant `tail_aligned`, `nb` x-span **300→174**; `crossing_score=6` (target `<=3`) — next: Cc passive tap second pass.
 - **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint.
 
@@ -161,6 +161,20 @@ python -m pytest tests/test_ngspice_behavior.py -v
 - Governance ownership lock: treat `.cursor/agents/`, `.cursor/rules/`, and `.cursor/skills/` as owner-managed; executor agents do not modify them unless explicitly instructed by owner.
 - Mode routing: composer-mode requires Claude verification before gate progression; non-composer (Codex) mode may complete locally with `dv-verifier` + parent re-run evidence.
 - Shorthand contract: user `continue` = execute next step now; user `continue and next window` = execute now and output next-window snippet (files + skills/rules + agent pipeline).
+
+---
+
+## Tangling next cut (planned — after BSIM CI PR)
+
+**Current (partial):** variant `tail_aligned`; `nb` x-span **300→174**; `crossing_score=6` (target `<=3`). Tests: `test_schematic_no_tangling.py` **5/5**, `test_schematic_connectivity.py` **14/14**.
+
+**Architecture boundary (do not break):** keep production `route_nets()` in `schematic_router.py`; placement scoring stays in `schematic_layout.py` via `_choose_opamp_variant()`.
+
+**Next iteration steps:**
+1. **Cc passive tap second pass** — after primary `route_nets(layout.placed)`, route Miller cap (`Cc`) as short orthogonal taps on already-routed `vout`/`nout1` nets (localized stubs near M6/M7), not as a competing long net through the floorplan core.
+2. **Re-score with `schematic_geometry.score_layout`** — objective remains `crossing_score + span_penalty` for `nb`; accept only if `crossing_score` drops toward `<=3`.
+3. **Guard rails** — no wholesale merge from `files/schematic_layout.py`; `files/` `<=3` assertion is reference-only until adapted to production API.
+4. **Verify gate** — `pytest tests/test_schematic_no_tangling.py -q` and `pytest tests/test_schematic_connectivity.py -v` must stay green before any STATUS upgrade from `partial`.
 
 ---
 

@@ -12,7 +12,7 @@
 
 | # | Workstream | Gate before starting |
 |---|------------|----------------------|
-| 1 | **BSIM CI proof via PR** | `ef43ef6` pushed with `sky130-bsim-smoke` job; open PR (workflow triggers on PR) and capture green Actions run URL in `STATUS.md` |
+| 1 | **BSIM CI proof via PR** | `a8e8097` pushed (`ef43ef6` + docs); local BSIM smoke **5/5** at HEAD; open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and capture green `sky130-bsim-smoke` Actions URL in `STATUS.md` |
 | 2 | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) before envelope discussions |
 | 3 | **Schematic tangling reduction follow-up** | `tail_aligned` variant landed (`nb` span 300→174); next: Cc passive tap routing second pass to drive `crossing_score` from 6 toward `<=3`; keep `route_nets()` + connectivity 14/14 green |
 
