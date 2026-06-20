@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (BSIM CI wired; tangling guard landed; Actions proof blocked on PR)  
-**HEAD (local):** `a8e8097` on `feat/schematic-orthogonal-router` (pushed; `ef43ef6` + doc sync commit)
+**Updated:** 2026-06-20 (CMRR tail/bias sweep; policy lock reverted; BSIM CI blocked on PR)  
+**HEAD (local):** `85a8d51` on `feat/schematic-orthogonal-router` (pushed; doc/script commit pending)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
@@ -25,11 +25,11 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **1** | **BSIM CI proof via PR** | Commits `ef43ef6`/`a8e8097` pushed; local WSL BSIM smoke **5/5** re-verified at `a8e8097`. **Blocker:** no open PR (`gh` not authenticated); open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
-| **2** | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) and keep `bench-only` until datasheet-equivalence is proven |
+| **1** | **BSIM CI proof via PR** | Commits `ef43ef6`/`a8e8097`/`85a8d51` pushed; local WSL BSIM smoke **5/5** re-verified at `85a8d51`. **Blocker:** no open PR (`gh` not authenticated); GitHub API still shows **0** PR runs on this branch. Open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
+| **2** | **CMRR causal diagnosis (open)** | Tail/bias sweep landed (`diag_opamp_cmrr_breakdown.py`): **Lb** (M8 on `nb`) is strongest knob — Lb 0.5→8 µm drops CMRR **159.5→125.5 dB** (open-loop) and narrows rl10k gap. **152 dB open-loop still implausible** vs RS321 typ 80 dB. **No production-fixture policy** until datasheet-equivalence proven. RL=10k remains diagnostic only |
 | **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
-| **4** | **Schematic tangling reduction follow-up** | Keep `route_nets()` path; next cut: passive tap routing for Cc (`vout`/`nout1`) and tighten crossing gate toward `<=3`; current `tail_aligned` variant, `nb` x-span **300→174**, `crossing_score=6` |
-| Parking lot | Schematic drag-reroute, vref iq architecture (Option A) | After PVT tail; see § vref decision |
+| **4** | **Schematic tangling reduction follow-up** | Cherry-pick **landed** (`ef43ef6`); `tail_aligned` variant, `nb` x-span **300→174**, `crossing_score=6` (partial). Next: Cc passive tap second pass; keep `route_nets()` + connectivity **14/14** |
+| Parking lot | Generative layout pilot (ALIGN/MAGICAL) | Phase 7+ — see `docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md`; after BSIM CI PR |
 
 **Do NOT start:** Phase 4/5, LoRA, cross-repo Cursor brain, layout/DRC/LVS, PLL/SerDes/standard-cells/high-speed IO (`PARKING_LOT.md` § out of scope).
 
@@ -58,7 +58,8 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | UI hotfix | `renderError()` restored after JS corruption |
 | Docs | `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `SESSION_NOTES.md`, etc. |
 | VCVS → real error amp | vref topology validated; **iq still open** |
-| BSIM smoke + CI wiring | Local rerun at `a8e8097`: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = **5/5 pass** (`vref` deferred); `.github/workflows/ci.yml` includes `sky130-bsim-smoke` job — **Actions URL not verified** (needs PR; `gh auth login` unavailable this session) |
+| BSIM smoke + CI wiring | Local rerun at `85a8d51`: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = **5/5 pass** (`vref` deferred); `.github/workflows/ci.yml` includes `sky130-bsim-smoke` job — **Actions URL not verified** (needs PR; branch has no PR runs yet) |
+| CMRR tail/bias sweep | `diag_opamp_cmrr_breakdown.py` rerun: Lb sweep **159.5→125.5 dB** (0.5→8 µm); rl10k fixture **15–25 dB** below open-loop on defaults. Policy lock **reverted** — fixture decision held until causal story + datasheet equivalence |
 | Schematic tangling guard | Added `openanalog/eda/schematic_geometry.py`, opamp placement-variant scoring in `schematic_layout.py`, and `tests/test_schematic_no_tangling.py` (**5 passed**). Chosen variant `tail_aligned`; `nb` x-span **300→174**; residual `crossing_score=6` still open |
 | Agentic EDA survey | `docs/research/AGENTIC_EDA_SURVEY.md` |
 | Cursor conventions | `.cursor/skills/openforge-conventions/SKILL.md` |
@@ -149,10 +150,10 @@ python -m pytest tests/test_ngspice_behavior.py -v
 - **Docs:** `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `analog_design_rules.md` (stub rule), `SESSION_NOTES.md`, `VERIFY_BRIEF.md`.
 
 ### Open (real gates)
-- **PVT / testbench metrics** — **PSRR @ 100 Hz landed** (`verify_psrr.py`). **CMRR bench remains `partial`** (`verify_cmrr.py`): normalization fixed and RL fixture sanity run (`diag_opamp_cmrr_fixture.py`), but datasheet-equivalence remains unverified (see `STATUS.md` / `semicon-log.md`).
-- **BSIM in CI** — `sky130-bsim-smoke` job at `ef43ef6`; doc sync `a8e8097` pushed; local WSL smoke **5/5** at `a8e8097`; **Actions URL not verified** (workflow runs on PR only — open compare link above).
+- **PVT / testbench metrics** — **PSRR @ 100 Hz landed** with W3 causal story (`verify_psrr.py`). **CMRR bench `partial`** — normalization fixed, tail/bias sweep shows Lb is dominant knob, but **152 dB open-loop magnitude not physically credible** on bundled models; RL=10k drops ~25 dB but still >>80 dB typ. **No fixture policy lock.** See `semicon-log.md` entry 6.
+- **BSIM in CI** — `sky130-bsim-smoke` job at `ef43ef6`; docs sync through `85a8d51`; local WSL smoke **5/5** at `85a8d51`; **Actions URL not verified** (workflow runs on PR only; no PR runs yet).
 - **Schematic tangling residual** — `tests/test_schematic_no_tangling.py` **5/5**; chosen variant `tail_aligned`, `nb` x-span **300→174**; `crossing_score=6` (target `<=3`) — next: Cc passive tap second pass.
-- **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint.
+- **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint. Three untracked `scripts/diag_vref_*.py` files (`topology`, `selfbias_pnp`, `tune`) are **pre–Option B historical exploration** (alternate bandgap topologies / PNP paths); **not authorized reopening** — do not run for iq sizing; delete or move to `scripts/archive/` in a future cleanup pass.
 
 ### Discipline reminders
 - Passing connectivity tests ≠ schematic looks good ≠ UI loads.
@@ -161,6 +162,23 @@ python -m pytest tests/test_ngspice_behavior.py -v
 - Governance ownership lock: treat `.cursor/agents/`, `.cursor/rules/`, and `.cursor/skills/` as owner-managed; executor agents do not modify them unless explicitly instructed by owner.
 - Mode routing: composer-mode requires Claude verification before gate progression; non-composer (Codex) mode may complete locally with `dv-verifier` + parent re-run evidence.
 - Shorthand contract: user `continue` = execute next step now; user `continue and next window` = execute now and output next-window snippet (files + skills/rules + agent pipeline).
+
+---
+
+## Findings closure (Claude review — 2026-06-20)
+
+**Accepted with evidence:**
+
+| Finding | Verdict | Evidence |
+|---------|---------|----------|
+| 0.8 orthogonal routing (stub-then-fold) | ✅ **working** | `schematic_router.py` + `route_nets()` in render path; connectivity **14/14** |
+| Root cause = **placement distance** on `nb` net (M8/M5/M7), not draw bug | ✅ **confirmed** | Topology ties in `opamp.py`; floorplan zones in `schematic_layout.py`; `tail_aligned` drops `nb` x-span **300→174** |
+| 0.8 improved **routing style**, not placement root cause | ✅ **confirmed** | SVG deltas: opamp `terminal_stub` 0→21, comparator 0→20; io-stub unchanged 3→3 |
+| Cherry-pick integration (geometry + variant scoring + tests) | ✅ **landed** | `ef43ef6`: `schematic_geometry.py`, `_STAGE2_VARIANTS`, `tests/test_schematic_no_tangling.py` **5/5** |
+| `files/` bundle standalone | ⚠️ **reference-only** | `files/test_schematic_no_tangling.py` fails `<=3` (score=6); `standalone_integration_smoke.py` expects `isolated` winner — production picks `tail_aligned` |
+| Residual tangling | ⚠️ **partial** | `crossing_score=6` (target ≤3); next cut: Cc passive tap second pass |
+
+**Do not:** wholesale replace `openanalog/eda/schematic_layout.py` with `files/schematic_layout.py`.
 
 ---
 
@@ -205,22 +223,23 @@ Env: WSL Ubuntu + .venv_wsl for ngspice; Windows .venv for web (python -m openan
 ## Copy-paste — next **Claude** window (reviewer / gatekeeper)
 
 ```
-Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md
+Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md, docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md
 
 You are the reviewer, not the patch author. Gate acceptance on evidence.
 
 This session context:
-- vref Option B locked — topology validated, iq open on placeholder BJTs; verify exits 1 on iq (honest).
-- Next engineering: PVT/testbench expansion, not vref redesign.
-- 0.8 router signed off with parent + `dv-verifier` reruns; STATUS updated with 14/14 pytest + SVG deltas.
-- PARKING_LOT: PSRR/CMRR/THD/PVT + out-of-scope (PLL/SerDes/vision→corpus).
+- Findings closure: 0.8 router working; nb placement pressure confirmed; cherry-pick landed at ef43ef6/85a8d51; crossing_score=6 partial; files/ reference-only.
+- BSIM CI: sky130-bsim-smoke wired; Actions URL blocked on PR (gh not authenticated).
+- vref Option B locked — topology validated, iq open on placeholder BJTs.
+- Layout survey: ALIGN/MAGICAL/OpenFASOC are Phase 7+ downstream of forge; SerDes/HBM remain parking lot.
 
 When Cursor returns work, check:
 1. Real ngspice bench output for new metric (not stub pass alone)
 2. git diff / pytest output / STATUS update consistency
-3. No scope creep into Phase 4+ or tooling mega-setup
+3. No scope creep into Phase 4+ layout integration without pilot gate
+4. Generative layout memo items mapped to parking lot, not immediate sprint
 
-Push back on: restated roadmaps, "tests passed" without output, UI claims without browser check.
+Push back on: restated roadmaps, "tests passed" without output, claiming GDS/layout done without DRC/LVS artifacts.
 ```
 
 ---

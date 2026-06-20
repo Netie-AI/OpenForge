@@ -12,8 +12,8 @@
 
 | # | Workstream | Gate before starting |
 |---|------------|----------------------|
-| 1 | **BSIM CI proof via PR** | `a8e8097` pushed (`ef43ef6` + docs); local BSIM smoke **5/5** at HEAD; open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and capture green `sky130-bsim-smoke` Actions URL in `STATUS.md` |
-| 2 | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) before envelope discussions |
+| 1 | **BSIM CI proof via PR** | `85a8d51` pushed (`ef43ef6` + doc sync); local BSIM smoke **5/5** at HEAD; branch still has **0** PR workflow runs. Open [compare → PR](https://github.com/Netie-AI/OpenForge/compare/main...feat/schematic-orthogonal-router) and capture green `sky130-bsim-smoke` Actions URL in `STATUS.md` |
+| 2 | **CMRR fixture equivalence evidence** | Tail/bias sweep done (`diag_opamp_cmrr_breakdown.py`); Lb strongest causal knob. **Hold** production-fixture decision. RL=10k diagnostic only until datasheet-equivalence proven |
 | 3 | **Schematic tangling reduction follow-up** | `tail_aligned` variant landed (`nb` span 300→174); next: Cc passive tap routing second pass to drive `crossing_score` from 6 toward `<=3`; keep `route_nets()` + connectivity 14/14 green |
 
 **First metric when PVT starts (2026-06-20):** **PSRR** — ✅ landed (`scripts/verify_psrr.py`, `STATUS.md`). **CMRR** is `partial`: normalization corrected and RL fixture sanity run, but datasheet-equivalence remains unverified.
@@ -76,13 +76,15 @@ Cross-ref: `openanalog/forge/spec_envelopes.py`, per-topology `.tran`/`.ac` in `
 | **Temperature sweep** | −40 / 27 / 125 °C (or envelope min/max) on key specs | 3–4 | corner models or `.temp` sweep defined |
 | **Monte Carlo mismatch** | W/L/ΔVth variation — ngspice `.mc` or scripted param scatter; report yield % to spec | 4+ | single-corner + temp stable |
 | **Corner-aware sizing** | Sizer optimizes worst-corner or min-yield, not TT-only | 4+ | MC infrastructure |
-| **Layout-induced variation** | Matching variance from placement — **needs layout** | 7+ | auto-layout or handoff GDS |
+| **Layout-induced variation** | Matching variance from placement — **needs layout** | 7+ | auto-layout or handoff GDS; pilot survey: `docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md` |
 
 Survey note: ASO.ai-style multi-corner RL sizing optimizes **existing** schematics — different claim from OpenForge topology+spec generation (`docs/research/AGENTIC_EDA_SURVEY.md`).
 
 ---
 
 ## Deferred — layout / matching / PEX
+
+**Survey (2026-06-20):** `docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md` — ALIGN, MAGICAL, OpenFASOC, BAG3++, OpenLane layer map; SerDes/HBM explicitly out of scope. **No integration until** BSIM CI PR proof + single-block pilot gate.
 
 | Item | Notes | Phase | After |
 |------|-------|-------|-------|

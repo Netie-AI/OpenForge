@@ -223,3 +223,59 @@ AC ripple on supply (`dc VDD ac 0.1`), inputs at bias (opamp: VCM; LDO: closed l
 
 - `scripts/diag_opamp_psrr_breakdown.py`
 - `scripts/verify_psrr.py` (raw stdout in STATUS sign-off)
+
+---
+
+## Entry 6 — CMRR @ 100 Hz bench (2026-06-20)
+
+**Status:** bench landed for opamp only — **not** added to `DEV_MODE_SPECS` fitness gate.
+
+### Pattern
+
+Open-loop common-mode AC drive on both inputs (no feedback harness): `Vinp vinp 0 dc {VCM} ac 0.1`, `Vinn vinn 0 dc {VCM} ac 0.1`, then `meas ac acm_db find vdb(vout) at=100`. After `dv-verifier` review, CMRR normalization was corrected for AC-amplitude mismatch (`ac` diff=1 vs CM=0.1): `cmrr_dB = aol_db_100 - (acm_db + 20)`.
+
+### Results (`scripts/verify_cmrr.py`, `scripts/diag_opamp_cmrr_breakdown.py`)
+
+| Case | cmrr_dB | Notes |
+|------|---------|-------|
+| defaults | **152.0** | corrected from prior +20 dB artifact; RS321 typ reference 80 dB |
+| sized s42 (RS321 gate) | **151.4** | `meets_all=True`; CMRR still not part of gate |
+| Cc sweep (0.5–10 pF) | 148.1–152.3 | mild change |
+| Iref=5 µA | 163.2 | stronger rejection |
+| W3 sweep (8→150 µm) | 143.4–162.8 | non-monotonic low point at W3=30 |
+| W6=120 µm | 168.4 | highest in this quick sweep |
+
+### Tail / bias causal sweep (`scripts/diag_opamp_cmrr_breakdown.py`, 2026-06-20 rerun)
+
+Parallel to PSRR W3 sweep — sweep tail (M5) and bias mirror (M8 on `nb`) geometry vs CMRR, reporting both open-loop and `RL=10k` fixture columns:
+
+| Sweep | CMRR range (open-loop) | CMRR range (rl10k) | Notes |
+|-------|------------------------|--------------------|-------|
+| **Lb (M8)** 0.5→8 µm | **159.5 → 125.5 dB** | 137.6 → 118.6 dB | **Strongest causal knob** — shorter Lb inflates CMRR; rl10k gap narrows at long Lb |
+| L5 (M5 tail) 0.5→8 µm | 142.7 → 156.4 dB | 119.1 → 147.1 dB | Non-monotonic open-loop; **rl10k rises with L5** (opposite trend) |
+| W5 (M5 tail) 4→64 µm | 142.7 → 155.2 dB | 119.1 → 134.7 dB | Weak / non-monotonic |
+| W3 (PMOS load) 8→150 µm | 143.4 → 162.8 dB | 127.4 → 152.3 dB | PSRR tracks W3 (20→83 dB); CMRR moves less consistently |
+
+**Interpretation:** Bundled level-1 models likely give unrealistically high output impedance on the M8 bias stack (short Lb → CMRR inflated toward 160 dB). The loaded fixture is consistently more pessimistic (~15–25 dB on defaults) but still far above RS321 typ 80 dB — so neither fixture is datasheet-validated yet. **Do not lock production-fixture policy** until equivalence is proven (same discipline as pre–Option B vref iq).
+
+### Fixture sanity (`scripts/diag_opamp_cmrr_fixture.py`)
+
+Datasheet header includes `RL=10k` to `VS/2`. Added diagnostic path in `_build_cmrr_deck(..., rl_to_vcm_ohm=...)` and compared:
+
+| Case | base cmrr_dB | rl=10k cmrr_dB | delta |
+|------|---------------|----------------|-------|
+| defaults | 152.0 | 127.4 | -24.6 dB |
+| sized s42 | 151.4 | 142.4 | -9.0 dB |
+
+Interpretation: RL materially changes measured CMRR but still leaves values far above RS321 typ 80 dB. This resolves one fixture dimension (load), not full datasheet-equivalence.
+
+### Decision
+
+CMRR bench is measurable and normalization-corrected, but **not closed**. 152 dB open-loop magnitude is not physically credible for this topology on bundled models; tail/bias Ro (especially M8 **Lb**) is the leading causal hypothesis. Remains bench-only until fixture-equivalence is explicitly resolved. **No production-fixture policy lock.**
+
+### Evidence
+
+- `openanalog/forge/topologies/opamp.py` — `_build_cmrr_deck`, `aol_db_100`, and `cmrr_dB` wiring
+- `scripts/verify_cmrr.py`
+- `scripts/diag_opamp_cmrr_breakdown.py`
+- `scripts/diag_opamp_cmrr_fixture.py`
