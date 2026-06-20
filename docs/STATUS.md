@@ -125,11 +125,11 @@ Reproduce: `python scripts/verify_phase2.py` (WSL, ngspice on PATH).
 
 | Category | Defaults | Sized | Datasheet ref | Notes |
 |----------|----------|-------|---------------|-------|
-| opamp (bundled) | **20.0 dB** | **54.7 dB** (seed=42) | RS321 typ **85 dB** | PSRR deck added; defaults weak — sizing helps but **does not close** RS321 PSRR bar |
+| opamp (bundled) | **20.0 dB** | **54.7 dB** (seed=42) | RS321 typ **85 dB** | **Not structural floor** — W3 (PMOS mirror load) is causal knob: W3=150 µm → **83.1 dB** (`diag_opamp_psrr_breakdown.py`). Sized s42 misses because PSRR **not in `DEV_MODE_SPECS`** — sizer blind spot, not topology limit. See `semicon-log.md` entry 5. |
 | ldo (bundled) | **102.7 dB** | **110.3 dB** (seed=7) | ~60 dB floor (informative) | Pre-existing `_build_ac_deck`; strong rejection |
 | vref (SKY130 L1 BJT placeholders) | **86.1 dB** | — | line_reg 1.3 mV (DC) | AC PSRR ~86 dB at 100 Hz; iq still open (Option B) |
 
-Reproduce: `python scripts/verify_psrr.py` (WSL). **Next metric (one session):** CMRR — see `PARKING_LOT.md`.
+Reproduce: `python scripts/verify_psrr.py` (WSL). Opamp causal sweep: `python scripts/diag_opamp_psrr_breakdown.py`. **No pytest PSRR assertions yet** — bench-only until envelope gate. **Next metric (one session):** CMRR — see `PARKING_LOT.md`.
 
 ## Phase 0 — Infrastructure (2026-06-17)
 

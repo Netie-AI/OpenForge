@@ -177,10 +177,49 @@ AC ripple on supply (`dc VDD ac 0.1`), inputs at bias (opamp: VCM; LDO: closed l
 | ldo | 102.7 | 110.3 (s7) | strong |
 | vref | 86.1 | — | iq still Option B |
 
-**Interpretation:** PSRR infrastructure works. Opamp PSRR is a real gap (not a bench bug) — separate from RS321 AOL/GBP/PM gate. Do not add loose PSRR to fitness without closing the gap or documenting honest partial.
+**Interpretation:** PSRR infrastructure works. LDO/vref strong. Opamp gap is **not** a vref-iq-style structural floor — see entry 5.
 
 ### Evidence
 
 - `openanalog/forge/topologies/opamp.py` — `_build_psrr_deck`
-- `openanalog/forge/topologies/vref.py` — `_build_psrr_deck`
+- `openanalog/forge/topologies/vref.py` — `_build_psrr_deck` (separate ngspice run; **does not alter** main bandgap `.op`/DC bias deck)
 - `scripts/verify_psrr.py`
+
+---
+
+## Entry 5 — Opamp PSRR gap: sizer blind spot, not structural floor (2026-06-20)
+
+**Question:** Is RS321 85 dB PSRR closable by sizing, or Option-B defer?
+
+**Method:** `scripts/diag_opamp_psrr_breakdown.py` — manual param sweeps + compare to sized seed=42 (RS321 fitness, no PSRR in envelope).
+
+### Causal sweep (bundled L1, PSRR @ 100 Hz)
+
+| Knob | psrr_dB | Notes |
+|------|---------|-------|
+| defaults | 20.0 | W3=8 µm |
+| Cc 0.5–10 pF | 20.0 | Miller cap **does not move** PSRR at this bench |
+| Iref 5 µA | 20.0 | Bias current irrelevant |
+| W6 120 µm | 20.0 | Output stage width irrelevant |
+| **W3 30 µm** | **66.5** | PMOS mirror load — **dominant knob** |
+| W3 60 µm | 75.7 | |
+| W3 100 µm | 80.1 | |
+| W3 150 µm | **83.1** | Within ~2 dB of RS321 85 dB typ |
+| sized s42 (RS321 gate) | 54.7 | Sizer trades W3 for GBP/PM/iq — **not optimizing PSRR** |
+
+**Mechanism (hypothesis):** Supply ripple on `VDD` couples through PMOS mirror load (M3/M4, `{W3}`) into the diff-pair tail/output. Wider mirror load ↑ rejection. Not a separate architecture problem — mirror sizing tradeoff the RS321 sizer doesn't see.
+
+### Decision
+
+| | |
+|---|---|
+| **Not Option B** | Manual W3 sweep reaches **83 dB** — gap is closable on bundled L1 |
+| **Deferred from fitness gate** | PSRR not in `DEV_MODE_SPECS`; seed=42 `meets_all=True` while PSRR=54.7 dB is expected |
+| **Reopen when** | (1) add `psrr>85dB` to RS321 envelope + sizer weights, or (2) dedicated PSRR sizing session (W3↑ with GBP/PM guard), or (3) BSIM card where mirror ro differs |
+
+**Do not:** burn blind seed sweeps expecting PSRR to move under current envelope — same discipline as vref iq, but here the fix is **envelope + W3**, not topology redesign.
+
+### Evidence
+
+- `scripts/diag_opamp_psrr_breakdown.py`
+- `scripts/verify_psrr.py` (raw stdout in STATUS sign-off)
