@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (Phase 0.8 signed off; CMRR partial; governance lock)  
-**HEAD (local):** `09fdcfe` on `feat/schematic-orthogonal-router`
+**Updated:** 2026-06-20 (BSIM CI wired; tangling guard landed; Actions proof pending PR)  
+**HEAD (local):** `ef43ef6` on `feat/schematic-orthogonal-router` (pushed)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
@@ -25,10 +25,10 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **1** | **BSIM CI proof on pushed HEAD** | `sky130-bsim-smoke` workflow job added; next push/PR must show Actions green with run URL in `STATUS.md` |
+| **1** | **BSIM CI proof via PR** | Commit `ef43ef6` pushed; `.github/workflows/ci.yml` triggers on `main`/`master` push + `pull_request` only — open PR from `feat/schematic-orthogonal-router` and record green `sky130-bsim-smoke` run URL in `STATUS.md` |
 | **2** | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) and keep `bench-only` until datasheet-equivalence is proven |
 | **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
-| **4** | **Schematic tangling reduction follow-up** | Keep 0.8 router path; reduce opamp `crossing_score` from 6 toward `<=3` without regressing `tests/test_schematic_connectivity.py` |
+| **4** | **Schematic tangling reduction follow-up** | Keep `route_nets()` path; next cut: passive tap routing for Cc (`vout`/`nout1`) and tighten crossing gate toward `<=3`; current `tail_aligned` variant, `nb` x-span **300→174**, `crossing_score=6` |
 | Parking lot | Schematic drag-reroute, vref iq architecture (Option A) | After PVT tail; see § vref decision |
 
 **Do NOT start:** Phase 4/5, LoRA, cross-repo Cursor brain, layout/DRC/LVS, PLL/SerDes/standard-cells/high-speed IO (`PARKING_LOT.md` § out of scope).
@@ -150,8 +150,8 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ### Open (real gates)
 - **PVT / testbench metrics** — **PSRR @ 100 Hz landed** (`verify_psrr.py`). **CMRR bench remains `partial`** (`verify_cmrr.py`): normalization fixed and RL fixture sanity run (`diag_opamp_cmrr_fixture.py`), but datasheet-equivalence remains unverified (see `STATUS.md` / `semicon-log.md`).
-- **BSIM in CI** — workflow wired (`sky130-bsim-smoke`), but no pushed-HEAD Actions proof URL yet.
-- **Schematic tangling residual** — placement pressure mitigation landed, but opamp `crossing_score` still 6 (target `<=3`) under current router.
+- **BSIM in CI** — `sky130-bsim-smoke` job committed at `ef43ef6`; local WSL smoke **5/5**; **Actions URL not verified** (feature-branch push does not trigger workflow — needs PR).
+- **Schematic tangling residual** — `tests/test_schematic_no_tangling.py` **5/5**; chosen variant `tail_aligned`, `nb` x-span **300→174**; `crossing_score=6` (target `<=3`) — next: Cc passive tap second pass.
 - **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint.
 
 ### Discipline reminders

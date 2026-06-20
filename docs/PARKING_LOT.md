@@ -12,9 +12,9 @@
 
 | # | Workstream | Gate before starting |
 |---|------------|----------------------|
-| 1 | **BSIM CI proof on pushed HEAD** | `sky130-bsim-smoke` workflow job exists; capture first green Actions run URL and update `STATUS.md` |
+| 1 | **BSIM CI proof via PR** | `ef43ef6` pushed with `sky130-bsim-smoke` job; open PR (workflow triggers on PR) and capture green Actions run URL in `STATUS.md` |
 | 2 | **CMRR fixture policy decision** | RL fixture sanity done (`diag_opamp_cmrr_fixture.py`); choose production fixture path (base vs RL) before envelope discussions |
-| 3 | **Schematic tangling reduction follow-up** | 0.8 router + new tangling tests are green; reduce opamp `crossing_score` from 6 toward `<=3` without breaking connectivity tests |
+| 3 | **Schematic tangling reduction follow-up** | `tail_aligned` variant landed (`nb` span 300→174); next: Cc passive tap routing second pass to drive `crossing_score` from 6 toward `<=3`; keep `route_nets()` + connectivity 14/14 green |
 
 **First metric when PVT starts (2026-06-20):** **PSRR** — ✅ landed (`scripts/verify_psrr.py`, `STATUS.md`). **CMRR** is `partial`: normalization corrected and RL fixture sanity run, but datasheet-equivalence remains unverified.
 
