@@ -12,10 +12,12 @@
 
 | # | Workstream | Gate before starting |
 |---|------------|----------------------|
-| 1 | **Commit + push** session handoff (vref real amp, UI hotfix, docs) | `git status` clean on handoff-critical paths |
-| 2 | **Phase 3 vref topology decision** | `scripts/verify_phase3_vref.py` runs end-to-end (exit 1 OK on iq); see `docs/HANDOFF.md` § vref engineering brief |
-| 3 | **PVT / testbench expansion** (PSRR, CMRR, THD, noise) | vref decision recorded; first *new* capability after Phase 3 gate |
-| 4 | **Schematic drag-reroute + stub-then-fold verifier** | vref decision closed — do not interleave |
+| 1 | **PVT / testbench expansion** (PSRR, CMRR, THD, noise) | vref Option B locked (`HANDOFF.md`); one metric per session |
+| 2 | **Phase 0.8 schematic sign-off** | `pytest tests/test_schematic_connectivity.py -v` |
+| 3 | **BSIM CI job** | Local BSIM stable; vref honest-partial recorded |
+| 4 | **Schematic drag-reroute + stub-then-fold verifier** | After PVT tail — do not interleave |
+
+**First metric when PVT starts (2026-06-20):** **PSRR** — highest leverage for vref + LDO (supply rejection is core to both); relatively clean AC ripple-on-VDD bench vs THD (sine + FFT) or noise (`.noise` setup). Confirm in session; don't batch all four.
 
 ---
 
@@ -32,6 +34,7 @@ High-speed mixed-signal (RF/datacom) is a **different specialty** from precision
 | **Standard cells / digital P&R** | Digital flow (Yosys, lambdapdk, ChipAgents) — **different project** from transistor-level analog forge |
 | **Agent swarm** (Orchestrator → Circuit/Layout/Test/Silicon) | End-state platform pattern — study in `docs/research/AGENTIC_EDA_SURVEY.md`; one forge loop still being proven |
 | **Post-silicon HIL** (PyVISA, BERT, VNA, lab automation) | No tapeout, no silicon — post-fab characterization, past current roadmap |
+| **Vision OCR → netlist → training corpus** | Schematic images are lossy renderings; conflicts with fitness=1 / simulation-validated corpus only. Curated **text** principles (semicon-log, design rules) — yes; vision-extracted connectivity — **never** |
 
 **Correct near-term expansion after Phase 3:** PVT corners + named testbench metrics (PSRR/CMRR/THD/noise) — already in “Deferred — simulation” below; buildable in weeks on existing ngspice path.
 

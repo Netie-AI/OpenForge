@@ -150,9 +150,11 @@ Is the iq gap closable by **error-amp bias sizing alone**, or is the real diff-p
 | Sizer hits **138.5 µA** — still +38% over bar | Budget=80 explored resistor/mirror space; **cannot reach 100 µA** from current topology + param_ranges |
 | Miss magnitude (+38–104%) | **Not a small sizing miss** — do not burn cycles on seed sweeps expecting iq to land |
 
-**Verdict:** iq failure is **structural at current topology level**, not “one more sizing seed.” Next engineering step is **topology/bias architecture** (e.g. lower mirror current, shared bias, weaker loop gain tradeoff) — not param_ranges expansion alone. Revisit RS431 `<100 µA` bar honesty vs placeholder BJT cards.
+**Verdict:** iq failure is **structural at current topology level**, not “one more sizing seed.”
+
+**Decision (2026-06-20): Option B — honest partial.** Record iq open on placeholder BJTs; defer architecture redesign until real BJT cards or hard RS431 iq demo. **Next project work:** PVT/testbench expansion (PSRR/CMRR/THD), not vref iq sizing.
 
 ### Evidence
 
 - `scripts/diag_vref_iq_breakdown.py`
-- `scripts/verify_phase3_vref.py` (defaults line; sized path hits schematic `KeyError: 'v(vref)'` — sim numbers above from sizer direct)
+- `scripts/verify_phase3_vref.py` (end-to-end; exit 1 on iq)

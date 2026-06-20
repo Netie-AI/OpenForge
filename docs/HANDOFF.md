@@ -1,9 +1,9 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20  
-**HEAD (local):** `d48da02` — Phase 3 vref real amp + verify gate fix + session handoff docs
+**Updated:** 2026-06-20 (Option B locked)  
+**HEAD (local):** `a4f2c36` on `feat/schematic-orthogonal-router` (pushed)
 
-**Structural log:** `docs/semicon-log.md` entry 2 — real diff-pair amp in vref loop; topology validated, **iq open**.
+**Structural log:** `docs/semicon-log.md` entries 2–3 — real diff-pair amp; **iq open (Option B: honest partial on placeholder BJTs)**.
 
 **Read order:** this file → `docs/STATUS.md` → `docs/PARKING_LOT.md` → `AGENT_PLAN.md` §0 → `.cursor/.skills/SKILL.md`
 
@@ -25,17 +25,17 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **1** | **UI E2E browser check** | Agent 2026-06-20: op-amp Design Chip PASS on fresh server (`065abb0`). Human should tick `docs/UI_E2E_CHECKLIST.md`; footer git hash DOM bug remains. |
-| **2** | **Phase 3 vref topology decision** | Verify gate restored (`verify_phase3_vref.py` exit 1 = honest iq fail). **Decision:** lower mirror/BJT bias architecture vs documented honest-partial on placeholder BJTs — see § vref engineering brief below. **Not** more sizing seeds. |
-| **3** | **Phase 0.8 schematic sign-off** | Code landed (`50da5f5`, `schematic_router.py`); run `pytest tests/test_schematic_connectivity.py -v`; compare `logs/schematic_0.8_*.svg` vs 0.7; update STATUS 0.8 row if evidence clean |
-| **4** | **BSIM CI job** | After vref local stable — GitHub Actions still bundled-only for SKY130 (`STATUS.md`) |
-| Parking lot | Everything else | `docs/PARKING_LOT.md` — PSRR/CMRR/THD, PVT/MC, layout/PEX; **one session each** |
+| **1** | **PVT / testbench expansion** | First metric likely **PSRR** (`PARKING_LOT.md`) — one bench per session; benefits vref/LDO/opamp/comparator. |
+| **2** | **Phase 0.8 schematic sign-off** | `pytest tests/test_schematic_connectivity.py -v`; compare `logs/schematic_0.8_*.svg` vs 0.7; update STATUS 0.8 row |
+| **3** | **BSIM CI job** | After Phase 3 categories honest on local BSIM — Actions still bundled-only (`STATUS.md`) |
+| **4** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
+| Parking lot | Schematic drag-reroute, vref iq architecture (Option A) | After PVT tail; see § vref decision |
 
 **Do NOT start:** Phase 4/5, LoRA, cross-repo Cursor brain, layout/DRC/LVS, PLL/SerDes/standard-cells/high-speed IO (`PARKING_LOT.md` § out of scope).
 
-### Phase 3 vref — engineering brief (open gate)
+### Phase 3 vref — decision locked (**Option B**, 2026-06-20)
 
-**Evidence (2026-06-20):** `scripts/diag_vref_iq_breakdown.py` + `scripts/verify_phase3_vref.py` (end-to-end; exit 1 on iq is honest fail).
+**Evidence:** `scripts/diag_vref_iq_breakdown.py` + `scripts/verify_phase3_vref.py` (end-to-end; exit 1 on iq = honest fail, not crash).
 
 | Run | iq µA | vref V | line_reg mV |
 |-----|-------|--------|-------------|
@@ -43,16 +43,11 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | manual amp floor (`iref_amp=1 µA`) | **166.0** | 1.152 | 0.69 |
 | sized (seed=42, budget=80) | 138.5 | 1.196 | 1.25 |
 
-**Verdict:** iq **not closable by sizing alone** — PMOS mirror + BJT stack dominate. Dead sizer knob `ibias_uA` removed (was in `param_ranges` but unwired).
+**Verdict:** iq **not closable by sizing alone** — structural floor ~166 µA (PMOS mirror + BJT stack). Dead `ibias_uA` sizer knob removed.
 
-**Decision (pick one before more iq work):**
+**Decision: Option B — honest partial.** Topology + real error amp validated; **iq remains open** on level-1 BJT placeholders. Do **not** burn seeds or param sweeps on iq now. Revisit **Option A** (bias architecture redesign) only when (1) RS431 iq is a hard demo gate, or (2) real SKY130 BJT cards land.
 
-| Option | Action | When to choose |
-|--------|--------|----------------|
-| **A — Architecture change** | Redesign bias path (shared tail, lower mirror current, loop-gain tradeoff) | RS431 `<100 µA` bar stays the gate |
-| **B — Honest partial** | STATUS: topology proven, iq open on placeholder BJTs | Defer iq until real BJT cards + architecture pass |
-
-**After decision:** PVT/testbench (PSRR/CMRR/THD) first new capability. Schematic drag-reroute **after** vref, not interleaved.
+**Next engineering:** PVT/testbench expansion (not vref iq redesign).
 
 ### Recently done (this session chain)
 
@@ -153,10 +148,10 @@ python -m pytest tests/test_ngspice_behavior.py -v
 - **Docs:** `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `analog_design_rules.md` (stub rule), `SESSION_NOTES.md`, `VERIFY_BRIEF.md`.
 
 ### Open (real gates)
-- **Human UI E2E** — not verified in browser this session after hotfix.
-- **vref iq** — defaults ~204 µA, sized ~138 µA; target envelope still fails (`STATUS.md` Phase 3 vref row).
+- **PVT / testbench metrics** — PSRR, CMRR, THD, noise; first new capability after vref Option B lock.
+- **Phase 0.8 STATUS sign-off** — code on branch; pytest + SVG compare pending.
 - **BSIM in CI** — local 5/5 smoke; Actions still bundled-only.
-- **Uncommitted local diff** — web + docs may not match what next window sees on remote.
+- **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint.
 
 ### Discipline reminders
 - Passing connectivity tests ≠ schematic looks good ≠ UI loads.
@@ -173,11 +168,11 @@ Read first: docs/HANDOFF.md, docs/PARKING_LOT.md (Do next only), .cursor/.skills
 You are the executor. Do NOT expand scope.
 
 Sequence:
-1. If UI not yet browser-checked: remind human to run docs/UI_E2E_CHECKLIST.md — do not claim UI done without it.
-2. Phase 3 vref iq — scripts/verify_phase3_vref.py (WSL), close iq + default vref margin, update docs/STATUS.md with numbers.
-3. If time: Phase 0.8 STATUS sign-off — pytest tests/test_schematic_connectivity.py -v, compare logs/schematic_0.8_*.svg vs 0.7, add 0.8 row to STATUS if clean.
+1. PVT / testbench — pick one metric from PARKING_LOT § simulation (PSRR/CMRR/THD/noise); real ngspice bench + STATUS row.
+2. Phase 0.8 sign-off — pytest tests/test_schematic_connectivity.py -v; logs/schematic_0.8_*.svg vs 0.7.
+3. Optional: human tick docs/UI_E2E_CHECKLIST.md.
 
-Do NOT: Phase 4/5, LoRA, layout/DRC/LVS, cross-repo Cursor skills, UI redesign.
+Do NOT: vref iq sizing sweeps (Option B locked), Phase 4/5, LoRA, PLL/SerDes/vision→corpus, layout/DRC/LVS.
 
 Evidence: paste command output, diff, or artifact paths. Zero-trust — no "trust me" summaries.
 
@@ -194,14 +189,13 @@ Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md
 You are the reviewer, not the patch author. Gate acceptance on evidence.
 
 This session context:
-- 0.7 connectivity verified (IO stub gap was real; test failed then passed).
-- 0.8 stub-then-fold code on HEAD 065abb0; STATUS not yet updated.
-- UI index.html was corrupted and hotfixed — demand browser E2E or say "not verified."
-- vref iq still open (Phase 3) — real next engineering gate.
-- PARKING_LOT holds PSRR/CMRR/THD/PVT/layout — deferred, not forgotten.
+- vref Option B locked — topology validated, iq open on placeholder BJTs; verify exits 1 on iq (honest).
+- Next engineering: PVT/testbench expansion, not vref redesign.
+- 0.8 router on branch; STATUS sign-off pending.
+- PARKING_LOT: PSRR/CMRR/THD/PVT + out-of-scope (PLL/SerDes/vision→corpus).
 
 When Cursor returns work, check:
-1. Real ngspice numbers for vref iq (not _design() pass alone)
+1. Real ngspice bench output for new metric (not stub pass alone)
 2. git diff / pytest output / STATUS update consistency
 3. No scope creep into Phase 4+ or tooling mega-setup
 
