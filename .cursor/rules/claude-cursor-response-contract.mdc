@@ -25,4 +25,5 @@ Cursor reply sections:
 2. Verification output (verbatim)
 3. Evidence for review (diff or changed functions)
 4. Not verified
-5. Message for Claude
+5. Why / thought process (1–3 sentences: why this approach over alternatives, tradeoff made, what you'd reconsider if wrong)
+6. Message for Claude

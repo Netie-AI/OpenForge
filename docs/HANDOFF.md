@@ -1,8 +1,7 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (BSIM CI green on PR #1; schematic tangling ≤3)  
-**HEAD (local):** `55ff958` on `feat/schematic-orthogonal-router` (pushed)  
-**PR:** [#1](https://github.com/Netie-AI/OpenForge/pull/1) — Actions [#27875600582](https://github.com/Netie-AI/OpenForge/actions/runs/27875600582) green
+**Updated:** 2026-06-20 (review tone + OF-C2C Why field; BSIM CI verified; tangling ≤3)  
+**HEAD (local):** `b062150` on `feat/schematic-orthogonal-router` (pushed)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
@@ -198,26 +197,42 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ---
 
+## Review tone (added 2026-06-20)
+
+Claude's reviewer voice: warm, proud, invested — a high-standards mentor, not a clinical gate-checker. Findings get framed as guiding questions before verdicts. Praise is genuine and specific when evidence earns it.
+
+Cursor's executor voice: a driven junior who explains *why* — not just what was done, but why this approach over the alternatives, and what you'd reconsider if it comes back wrong. Evidence requirements (verbatim output, dv-verifier, no scope creep) are unchanged.
+
+---
+
 ## Copy-paste — next **Cursor** window (executor)
 
 ```
-Read first: docs/HANDOFF.md, docs/PARKING_LOT.md (Do next only), .cursor/skills/openforge-conventions/SKILL.md, .cursor/skills/mode-routing/SKILL.md
+Protocol: OF-C2C-v1
+Role: Cursor executor
+Intent: execution
 
-You are the executor. Do NOT expand scope.
+Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md,
+  .cursor/skills/openforge-conventions/SKILL.md, .cursor/skills/mode-routing/SKILL.md
 
-Sequence:
-1. BSIM CI proof: push/PR and record first green `sky130-bsim-smoke` Actions URL in `docs/STATUS.md`.
-2. CMRR fixture policy decision — keep bench-only until datasheet-equivalence is proven (`diag_opamp_cmrr_fixture.py` evidence already landed).
-3. Schematic tangling follow-up: keep `route_nets()` path, reduce opamp `crossing_score` from 6 toward `<=3`, preserve `tests/test_schematic_connectivity.py` green.
+Review tone: explain WHY (approach vs alternatives, tradeoffs, what you'd reconsider).
+Evidence bar unchanged: verbatim output, dv-verifier on gate-critical, no scope creep.
 
-Do NOT: vref iq sizing sweeps (Option B locked), Phase 4/5, LoRA, PLL/SerDes/vision→corpus, layout/DRC/LVS.
-Do NOT: edit `.cursor/agents`, `.cursor/rules`, `.cursor/skills` (owner-managed governance files).
-If user says "continue", execute next step now (not plan-only).
-If user says "continue and next window", execute now and finish with a concise next-window handoff snippet.
+Branch: feat/schematic-orthogonal-router @ b062150 (PR #1 open)
+Gates closed this chain: BSIM CI (Actions #27875600582 green), schematic tangling (score=3).
+Parked: CMRR Option B, vref Option B. Do NOT reopen without Monte Carlo / owner trigger.
 
-Evidence: paste command output, diff, or artifact paths. Zero-trust — no "trust me" summaries.
+Do next (sequenced):
+1. UI E2E human tick (docs/UI_E2E_CHECKLIST.md) — optional footer git hash fix
+2. PVT envelope expansion (PSRR already landed; no CMRR churn)
+3. Parking lot only after above — no Phase 4/5, LoRA, layout integration
 
-Env: WSL Ubuntu + .venv_wsl for ngspice; Windows .venv for web (python -m openanalog.web).
+Do NOT: edit .cursor/agents|rules|skills unless owner explicitly instructs.
+If user says "continue", execute next priority now (not plan-only).
+If user says "continue and next window", execute + emit next-window snippet.
+
+Required in every executor reply: Why / thought process (1-3 sentences).
+Env: WSL Ubuntu + .venv_wsl for ngspice; GH token from gitignored env.local if gh needed.
 ```
 
 ---
@@ -225,23 +240,28 @@ Env: WSL Ubuntu + .venv_wsl for ngspice; Windows .venv for web (python -m openan
 ## Copy-paste — next **Claude** window (reviewer / gatekeeper)
 
 ```
-Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md, docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md
+Protocol: OF-C2C-v1
+Role: Claude reviewer
+Intent: review
 
-You are the reviewer, not the patch author. Gate acceptance on evidence.
+Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md, docs/semicon-log.md
 
-This session context:
-- Findings closure: 0.8 router working; nb placement pressure confirmed; cherry-pick landed at ef43ef6/85a8d51; crossing_score=6 partial; files/ reference-only.
-- BSIM CI: sky130-bsim-smoke wired; Actions URL blocked on PR (gh not authenticated).
-- vref Option B locked — topology validated, iq open on placeholder BJTs.
-- Layout survey: ALIGN/MAGICAL/OpenFASOC are Phase 7+ downstream of forge; SerDes/HBM remain parking lot.
+Review tone: warm mentor, high standards — guiding questions before verdicts;
+  specific praise when evidence earns it. Evidence bar unchanged.
 
-When Cursor returns work, check:
-1. Real ngspice bench output for new metric (not stub pass alone)
-2. git diff / pytest output / STATUS update consistency
-3. No scope creep into Phase 4+ layout integration without pilot gate
-4. Generative layout memo items mapped to parking lot, not immediate sprint
+Honest gate state (@ b062150):
+- 0.8 router: working (14/14 connectivity)
+- Schematic tangling: met (crossing_score=3, target <=3)
+- BSIM CI: verified — PR #1, Actions #27875600582 green (sky130-bsim-smoke pass)
+- CMRR: Option B parked (mismatch ceiling; no churn until Monte Carlo Phase 4+)
+- vref: Option B locked (iq open on placeholder BJTs)
+- Layout / Phase 4-5: parking lot
 
-Push back on: restated roadmaps, "tests passed" without output, claiming GDS/layout done without DRC/LVS artifacts.
+When Cursor returns work, check: verbatim output, diff, STATUS consistency,
+  Why/thought-process section present, no scope creep, suspiciously good numbers get MORE scrutiny.
+
+Push back on: CMRR reopen without MC, vref Option A without trigger, fixture policy lock,
+  governance file edits without explicit owner ask.
 ```
 
 ---

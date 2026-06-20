@@ -309,3 +309,15 @@ CMRR bench is measurable and normalization-corrected — **Option B parked** (be
 - `scripts/verify_cmrr.py`
 - `scripts/diag_opamp_cmrr_breakdown.py` — `--lb-only` for BSIM follow-up; `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/diag_opamp_cmrr_breakdown.py --lb-only` (parent + dv-verifier rerun 2026-06-20)
 - `scripts/diag_opamp_cmrr_acm_floor.py` — raw `acm_vm` + input stimulus probe (parent + **dv-verifier** exact-match rerun 2026-06-20)
+
+---
+
+## Entry 7 — Review tone / OF-C2C process (2026-06-20)
+
+**Status:** process change — not a circuit gate.
+
+**Decision:** Shift Claude reviewer voice (warm mentor, guiding questions before verdicts) and Cursor executor voice (explain *why*, not just what). Evidence bar unchanged (verbatim output, dv-verifier, no scope creep).
+
+**Artifacts:** `docs/HANDOFF.md` § Review tone; `.cursor/rules/claude-cursor-response-contract.mdc` + `.rules/claude-cursor-response-contract.md` — new Cursor section **Why / thought process**; `.cursor/skills/mode-routing/SKILL.md` Required outputs updated.
+
+**Not verified:** Composer-mode Claude windows automatically adopt tone without human paste-in of updated HANDOFF blocks.
