@@ -292,14 +292,16 @@ Real datasheet CMRR (RS321 typ **80 dB**) is overwhelmingly **mismatch-limited**
 
 | Axis | Expected contribution | Status |
 |------|----------------------|--------|
-| RL=10k feedback fixture | May move CMRR **~10–15 dB** (legitimate next experiment) | queued — `diag_opamp_cmrr_fixture.py` path |
+| RL=10k feedback fixture | **−24.6 dB** on defaults (152.0→127.4); **−9.0 dB** sized s42 | **done** — authorized one-shot run 2026-06-20 (`diag_opamp_cmrr_fixture.py`, dv-verifier exact match) |
 | Mismatch / Monte Carlo | Dominant residual vs datasheet typ | **not in deck** — Phase 4+ per `PARKING_LOT.md` § Monte Carlo mismatch |
 
-**Do not grade fixture work as failure** if it only closes 10–15 dB instead of the full **55 dB** gap (BSIM Lb=8 **135.7 dB** vs typ **80 dB**). Document any remaining gap as **structural ceiling — no mismatch modeling in current deck**, same discipline as vref iq (Option B honest partial). **Do not start Monte Carlo now** (gated on single-corner stability).
+**Fixture run result:** RL=10k to VCM moves CMRR in the expected direction but **rl10k still 127.4 dB** — **47 dB above** RS321 typ 80 dB. Sized path: 142.4 dB (**42 dB above** typ). Fixture closed **~25 dB**, not **~55 dB** — consistent with mismatch-ceiling hypothesis, not fixture-only failure.
+
+**Do not grade fixture work as failure** — it did its job. Remaining gap documented as **structural ceiling — no mismatch modeling in current deck**. **CMRR diagnostic churn stopped** until Monte Carlo lands (Phase 4+).
 
 ### Decision
 
-CMRR bench is measurable and normalization-corrected, but **not closed** — **Option B honest partial** (bench-only, not in `DEV_MODE_SPECS`). Noise-floor refuted; Lb causal on bundled + BSIM; magnitude gap vs RS321 typ likely dominated by **missing mismatch modeling**, not fixable by fixture topology alone. Run RL=10k feedback fixture experiment once; then stop chasing the gap until Monte Carlo lands. **No production-fixture policy lock.**
+CMRR bench is measurable and normalization-corrected — **Option B parked** (bench-only, not in `DEV_MODE_SPECS`). Noise-floor refuted (dv-verifier); Lb causal on bundled + BSIM; authorized RL=10k fixture run complete; magnitude gap vs RS321 typ dominated by **missing mismatch modeling**. **No production-fixture policy lock. No further CMRR work until Phase 4+ Monte Carlo.**
 
 ### Evidence
 
