@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
 **Updated:** 2026-06-20 (schematic passive tap 6→3; CMRR parked)  
-**HEAD (local):** `6edfac5` on `feat/schematic-orthogonal-router` (pushed; code commit pending)
+**HEAD (local):** `a793e2f` on `feat/schematic-orthogonal-router` (pushed)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
