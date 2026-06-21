@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Any
 
 from openanalog.eda.netlist_graph import SpiceDevice
+from openanalog.eda.schematic_dut import schematic_devices
 from openanalog.eda.schematic_layout import (
     PlacedDevice,
     _FLOORPLAN_TOPOLOGIES,
@@ -181,10 +182,23 @@ def netlist_adjacency(devices: list[SpiceDevice]) -> dict[str, set[tuple[str, st
             for pin, node in zip(pin_names, dev.nodes[:3], strict=False):
                 adj.setdefault(node.lower(), set()).add((f"{dev.name.upper()}.{pin}", node.lower()))
             continue
+        if dev.kind == "Q":
+            pin_names = ("c", "b", "e")
+            for pin, node in zip(pin_names, dev.nodes[:3], strict=False):
+                adj.setdefault(node.lower(), set()).add((f"{dev.name.upper()}.{pin}", node.lower()))
+            continue
         pin_names = ("p", "n")
         for pin, node in zip(pin_names, dev.nodes[:2], strict=False):
             adj.setdefault(node.lower(), set()).add((f"{dev.name.upper()}.{pin}", node.lower()))
     return adj
+
+
+_EXTERNAL_IO_NETS = frozenset({"sig", "out", "ctrl", "vref", "clk1", "clk2", "phi1", "phi2", "phi3", "phi4"})
+
+
+def _is_external_io_net(net: str) -> bool:
+    nl = net.lower()
+    return nl in _EXTERNAL_IO_NETS or nl.startswith("clk") or nl.startswith("phi")
 
 
 def _wire_adjacency(
@@ -263,6 +277,10 @@ def _io_terminal_targets(placed: list[PlacedDevice]) -> dict[str, tuple[int, int
                 targets[nl] = _pt_key(pt)
             elif nl == "vout" and (nl not in targets or pd.dev.kind == "M"):
                 targets[nl] = _pt_key(pt)
+            elif _is_external_io_net(nl):
+                targets[nl] = _pt_key(pt)
+            elif nl == "n2" and "vout" not in targets:
+                targets["vout"] = _pt_key(pt)
     return targets
 
 
@@ -508,6 +526,7 @@ def verify_schematic_connectivity(
     result: dict[str, Any],
 ) -> list[str]:
     errors: list[str] = []
+    dut = schematic_devices(devices, result)
     svg = render_schematic_svg(devices, result)
     layout = build_schematic_layout(devices, result)
     placed = layout.placed
@@ -526,6 +545,9 @@ def verify_schematic_connectivity(
                 continue
         if any(n.lower().startswith("vin") for _, n in pins):
             continue
+        if any(_is_external_io_net(n) for _, n in pins):
+            if _terminal_on_wire(pt, segments) or _terminal_on_segment(pt, segments, io_only=True):
+                continue
         if not _terminal_on_wire(pt, segments):
             devs = ", ".join(f"{d}.{n}" for d, n in pins)
             errors.append(f"terminal ({pt[0]}, {pt[1]}) ({devs}) not on any wire")
@@ -568,7 +590,7 @@ def verify_schematic_connectivity(
     }
     nl_adj = {
         net: {p for p in pins if p[0] in placed_names}
-        for net, pins in netlist_adjacency(devices).items()
+        for net, pins in netlist_adjacency(dut).items()
     }
     sch_adj = schematic_adjacency_from_wires(placed, segments)
     for net, pins in nl_adj.items():
@@ -613,6 +635,13 @@ def anchor_wire_diffs(
                     continue
             if node.lower().startswith("vin") or node.lower() in ("inp", "inn"):
                 if _terminal_on_segment(key, segments, io_only=True):
+                    continue
+                diffs.append(
+                    f"{pd.dev.name}.{pin}:{node} anchor ({pt.x}, {pt.y}) not on wire or io-stub"
+                )
+                continue
+            if _is_external_io_net(node):
+                if _terminal_on_wire(key, segments) or _terminal_on_segment(key, segments, io_only=True):
                     continue
                 diffs.append(
                     f"{pd.dev.name}.{pin}:{node} anchor ({pt.x}, {pt.y}) not on wire or io-stub"

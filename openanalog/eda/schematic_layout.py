@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from openanalog.eda.netlist_graph import SpiceDevice
+from openanalog.eda.schematic_dut import schematic_devices
 from openanalog.eda.schematic_geometry import DeviceBox, Segment, collinear_overlap, score_layout
 from openanalog.eda.schematic_router import _TRACK_PITCH, route_nets, segments_to_svg_lines
 from openanalog.eda.symbols import Point, render_symbol, snap, symbol_for_device, terminal_positions, terminal_refs
@@ -33,9 +34,15 @@ _SVG_STYLES = """<style>
 </style>"""
 
 # Topology names with defined floorplans.
-_FLOORPLAN_TOPOLOGIES = frozenset({"two_stage_miller_opamp", "diff_pair_comparator"})
+_FLOORPLAN_TOPOLOGIES = frozenset({
+    "two_stage_miller_opamp",
+    "diff_pair_comparator",
+    "dickson_charge_pump",
+    "cmos_transmission_gate",
+    "sky130_bandgap",
+})
 
-# Shared diff-pair floorplan (op-amp + comparator).
+# Shared diff-pair floorplan (op-amp + comparator DUT — no testbench Rload).
 _DIFF_PAIR_LAYOUT: dict[str, tuple[str, int, bool]] = {
     "M3": ("load", 0, False),
     "M4": ("load", 1, True),
@@ -45,9 +52,46 @@ _DIFF_PAIR_LAYOUT: dict[str, tuple[str, int, bool]] = {
     "M2": ("input", 1, True),
     "M5": ("tail", 0, False),
     "M8": ("bias", 0, False),
-    "Iref": ("bias", 1, False),
-    "Cc": ("miller", 0, False),
-    "Rload": ("output", 2, False),
+    "IREF": ("bias", 1, False),
+    "CC": ("miller", 0, False),
+}
+
+_SWITCH_LAYOUT: dict[str, tuple[str, int, bool]] = {
+    "MN": ("pass", 0, False),
+    "MP": ("pass", 1, True),
+    "MND": ("driver", 0, False),
+    "MPD": ("driver", 1, True),
+}
+
+_CHARGE_PUMP_LAYOUT: dict[str, tuple[str, int, bool]] = {
+    "CFLY1": ("fly", 0, False),
+    "CFLY2": ("fly", 1, False),
+    "MN0": ("switch", 0, False),
+    "MN1": ("switch", 1, False),
+    "CBOOT0": ("boot", 0, False),
+    "CBOOT1": ("boot", 1, False),
+    "DBOOT0": ("diode", 0, False),
+    "DBOOT1": ("diode", 1, False),
+    "COUT": ("pump_out", 0, False),
+}
+
+_VREF_LAYOUT: dict[str, tuple[str, int, bool]] = {
+    "Q1": ("bjt", 0, False),
+    "Q2": ("bjt", 1, False),
+    "Q3": ("bjt", 2, False),
+    "RPTAT": ("vref_r", 0, False),
+    "RSCALE": ("vref_r", 1, False),
+    "MP1": ("mirror", 0, False),
+    "MP2": ("mirror", 1, False),
+    "MP3": ("mirror", 2, False),
+    "COUT": ("pump_out", 0, False),
+    "IREF_AMP": ("bias", 0, False),
+    "MEA8": ("bias", 1, False),
+    "MEA5": ("tail", 0, False),
+    "MEA1": ("input", 0, False),
+    "MEA2": ("input", 1, True),
+    "MEA3": ("load", 0, False),
+    "MEA4": ("load", 1, True),
 }
 
 _STAGE2_VARIANTS: dict[str, dict[str, tuple[str, int, bool]]] = {
@@ -61,8 +105,17 @@ _ZONE_Y = {
     "tail": 320,
     "bias": 400,
     "output": 120,
-    # Keep Cc taps above the diff-pair spine to avoid crossing the core row.
     "miller": 160,
+    "pass": 180,
+    "driver": 300,
+    "fly": 140,
+    "switch": 250,
+    "boot": 200,
+    "diode": 200,
+    "pump_out": 140,
+    "bjt": 100,
+    "vref_r": 220,
+    "mirror": 120,
 }
 
 _ZONE_X: dict[str, list[int]] = {
@@ -70,8 +123,18 @@ _ZONE_X: dict[str, list[int]] = {
     "input": [140, 340],
     "tail": [240],
     "bias": [160, 320],
-    "output": [460, 460, 500],
+    "output": [460, 460],
     "miller": [400],
+    "pass": [180, 380],
+    "driver": [180, 380],
+    "fly": [140, 340],
+    "switch": [240, 440],
+    "boot": [200, 400],
+    "diode": [260, 460],
+    "pump_out": [520],
+    "bjt": [120, 240, 360],
+    "vref_r": [480, 520],
+    "mirror": [140, 340, 460],
 }
 
 
@@ -138,15 +201,28 @@ def _layout_from_roles(devices: list[SpiceDevice], roles: dict[str, str]) -> dic
     return layout
 
 
+def _filter_layout(
+    layout: dict[str, tuple[str, int, bool]],
+    devices: list[SpiceDevice],
+) -> dict[str, tuple[str, int, bool]]:
+    names = {d.name.upper() for d in devices}
+    return {k: v for k, v in layout.items() if k in names}
+
+
 def _resolve_layout(
     devices: list[SpiceDevice],
     topology: str,
     device_meta: list[dict[str, Any]],
 ) -> tuple[dict[str, tuple[str, int, bool]], bool]:
     topo = (topology or "").lower()
-    if topo in _FLOORPLAN_TOPOLOGIES:
-        layout = {k.upper(): v for k, v in _DIFF_PAIR_LAYOUT.items()}
-        return layout, True
+    if topo in ("two_stage_miller_opamp", "diff_pair_comparator"):
+        return _filter_layout(_DIFF_PAIR_LAYOUT, devices), True
+    if topo == "dickson_charge_pump":
+        return _filter_layout(_CHARGE_PUMP_LAYOUT, devices), True
+    if topo == "cmos_transmission_gate":
+        return _filter_layout(_SWITCH_LAYOUT, devices), True
+    if topo == "sky130_bandgap":
+        return _filter_layout(_VREF_LAYOUT, devices), True
 
     roles = _expand_device_roles(device_meta)
     if roles:
@@ -535,17 +611,40 @@ def _io_terminals(placed: list[PlacedDevice]) -> dict[str, Point]:
                 io[nl] = pt
             elif nl == "vout" and (nl not in io or pd.dev.kind == "M"):
                 io[nl] = pt
+            elif nl in ("sig", "out", "ctrl"):
+                io[nl] = pt
+            elif nl.startswith("clk") or nl.startswith("phi"):
+                io[nl] = pt
+            elif nl == "n2" and "vout" not in io:
+                io["vout"] = pt
+            elif nl == "vref" and pd.dev.kind in ("R", "M", "Q"):
+                io[nl] = pt
     return io
 
 
 def _pin_labels(placed: list[PlacedDevice], topology: str, width: int) -> str:
     labels = ""
     topo = topology.lower()
-    if topo not in _FLOORPLAN_TOPOLOGIES and "opamp" not in topo and "comparator" not in topo:
+    if not any(
+        x in topo
+        for x in (
+            "opamp",
+            "comparator",
+            "switch",
+            "transmission",
+            "charge",
+            "dickson",
+            "bandgap",
+            "vref",
+        )
+    ) and topo not in _FLOORPLAN_TOPOLOGIES:
         return labels
 
     io = _io_terminals(placed)
     is_opamp = "opamp" in topo
+    is_switch = "transmission_gate" in topo or topo == "switch"
+    is_pump = "charge_pump" in topo or "dickson" in topo
+    is_vref = "bandgap" in topo or topo == "vref"
     left_lbl = "IN-" if is_opamp else "IN+"
     right_lbl = "IN+" if is_opamp else "IN-"
 
@@ -569,6 +668,26 @@ def _pin_labels(placed: list[PlacedDevice], topology: str, width: int) -> str:
         labels += (
             f'<line x1="{ext_x}" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
         )
+    if is_switch and "sig" in io:
+        g = io["sig"]
+        labels += f'<text x="50" y="{g.y + 4}" {_DIM}>SIG</text>\n'
+        labels += f'<line x1="70" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
+    if is_switch and "ctrl" in io:
+        g = io["ctrl"]
+        ext_x = max(width - 70, g.x + 20)
+        labels += f'<text x="{ext_x + 8}" y="{g.y + 4}" {_DIM}>CTRL</text>\n'
+        labels += f'<line x1="{ext_x}" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
+    if is_vref and "vref" in io:
+        g = io["vref"]
+        ext_x = max(width - 70, g.x + 20)
+        labels += f'<text x="{ext_x + 6}" y="{g.y + 4}" {_DIM}>VREF</text>\n'
+        labels += f'<line x1="{ext_x}" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
+    if is_pump:
+        for clk in sorted(k for k in io if k.startswith("clk") or k.startswith("phi")):
+            g = io[clk]
+            ext_x = 50 if clk.endswith("1") or clk == "phi1" else max(width - 70, g.x + 20)
+            labels += f'<text x="{ext_x - 6}" y="{g.y - 8}" {_DIM}>{clk.upper()}</text>\n'
+            labels += f'<line x1="{ext_x}" y1="{g.y}" x2="{g.x}" y2="{g.y}" class="signal-wire io-stub"/>\n'
     return labels
 
 
@@ -577,6 +696,7 @@ def build_schematic_layout(
     result: dict[str, Any] | None = None,
 ) -> SchematicLayout:
     result = result or {}
+    devices = schematic_devices(devices, result)
     topology = str(result.get("topology") or result.get("category") or "")
     device_meta = result.get("devices") or []
     topo = topology.lower()
@@ -613,6 +733,8 @@ def render_schematic_svg(
     result: dict[str, Any] | None = None,
 ) -> str:
     """Render role-placed schematic with symbols and orthogonal routing."""
+    result = result or {}
+    devices = schematic_devices(devices, result)
     layout = build_schematic_layout(devices, result)
     body = ""
 

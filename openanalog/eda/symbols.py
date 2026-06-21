@@ -122,6 +122,33 @@ _ISRC = SymbolDef(
     svg_body=_ISRC_BODY,
 )
 
+_DIODE_BODY = """
+<line x1="4" y1="20" x2="12" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<polygon points="14,14 14,26 26,20" fill="#5ad1c9"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+"""
+
+_DIODE = SymbolDef(
+    width=40,
+    height=40,
+    anchors={"p": Point(4, 20), "n": Point(36, 20)},
+    svg_body=_DIODE_BODY,
+)
+
+_BJT_BODY = """
+<circle cx="20" cy="24" r="16" fill="none" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="4" y1="24" x2="12" y2="24" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="20" y1="8" x2="20" y2="16" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="20" y1="32" x2="20" y2="40" stroke="#7aa2ff" stroke-width="1.5"/>
+"""
+
+_BJT = SymbolDef(
+    width=40,
+    height=48,
+    anchors={"c": Point(4, 24), "b": Point(20, 8), "e": Point(20, 40)},
+    svg_body=_BJT_BODY,
+)
+
 
 def is_pmos(dev: Any) -> bool:
     if dev.kind != "M":
@@ -150,6 +177,10 @@ def symbol_for_device(dev: Any) -> SymbolDef:
         return _RES
     if dev.kind == "I":
         return _ISRC
+    if dev.kind == "D":
+        return _DIODE
+    if dev.kind == "Q":
+        return _BJT
     return _RES
 
 
@@ -208,6 +239,12 @@ def terminal_refs(
             (dev.nodes[1], g, sym.anchor(g, origin, mirror=mirror)),
             (dev.nodes[2], s, sym.anchor(s, origin, mirror=mirror)),
         ]
+    if dev.kind == "Q":
+        pins = ("c", "b", "e")
+        return [
+            (dev.nodes[i], pins[i], sym.anchor(pins[i], origin, mirror=mirror))
+            for i in range(min(3, len(dev.nodes)))
+        ]
     p, n = two_term_anchors()
     return [
         (dev.nodes[0], p, sym.anchor(p, origin, mirror=mirror)),
@@ -236,6 +273,15 @@ def pin_escape_profile(
             dy = -1 if anchor.y < (sym.height // 2) else 1
             return PinEscapeProfile(direction=(0, dy), escape_length=escape_length)
         return PinEscapeProfile(direction=(1, 0) if mirror else (-1, 0), escape_length=escape_length)
+
+    if dev.kind == "Q":
+        if pin == "b":
+            return PinEscapeProfile(direction=(0, -1), escape_length=escape_length)
+        if pin == "c":
+            return PinEscapeProfile(direction=(-1, 0) if not mirror else (1, 0), escape_length=escape_length)
+        if pin == "e":
+            return PinEscapeProfile(direction=(0, 1), escape_length=escape_length)
+        return PinEscapeProfile(direction=(0, -1), escape_length=escape_length)
 
     if pin in ("p", "n"):
         p = sym.anchors["p"]

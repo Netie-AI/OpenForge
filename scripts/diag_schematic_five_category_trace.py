@@ -19,10 +19,12 @@ sys.path.insert(0, str(ROOT))
 
 from openanalog.eda.netlist_graph import parse_spice_devices
 from openanalog.eda.schematic_connectivity import (
+    anchor_wire_diffs,
     collinear_net_overlap_errors,
     false_junction_dot_errors,
     hop_centers,
     junction_points,
+    verify_schematic_connectivity,
 )
 from openanalog.eda.schematic_geometry import Segment, find_bad_crossings, find_collinear_overlaps
 from openanalog.eda.schematic_layout import (
@@ -74,8 +76,17 @@ def trace_category(name: str, kwargs: dict) -> bool:
     false_dots = false_junction_dot_errors(devices, result)
     dots = junction_points(svg)
     hops = hop_centers(svg)
+    floating = anchor_wire_diffs(devices, result)
+    conn_errs = verify_schematic_connectivity(devices, result)
+    float_terminals = [e for e in conn_errs if "not on any wire" in e or "anchor" in e]
 
-    ok = not active_slices and not collinear and not false_dots
+    ok = (
+        not active_slices
+        and not collinear
+        and not false_dots
+        and not floating
+        and not float_terminals
+    )
 
     print(f"\n=== {name} topology={result.get('topology', '?')} variant={layout.variant} ===")
     print(f"  artifact: {out.relative_to(ROOT)}")
@@ -92,6 +103,15 @@ def trace_category(name: str, kwargs: dict) -> bool:
     print(f"  false junction dots: {len(false_dots)}")
     for e in false_dots:
         print(f"    {e}")
+    print(f"  floating pins (anchor): {len(floating)}")
+    for e in floating[:12]:
+        print(f"    {e}")
+    if len(floating) > 12:
+        print(f"    ... +{len(floating) - 12} more")
+    print(f"  connectivity floating terminals: {len(float_terminals)}")
+    for e in float_terminals[:8]:
+        print(f"    {e}")
+    print(f"  floorplan_defined: {layout.floorplan_defined}")
     print(f"  GATE: {'PASS' if ok else 'FAIL'}")
     return ok
 
