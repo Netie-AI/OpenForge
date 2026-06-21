@@ -130,5 +130,5 @@ def render_svg(result: dict[str, Any]) -> str:
     color = "#3fd17a" if meets else "#ffcc66"
     m = re.search(r'viewBox="0 0 \d+ (\d+)"', svg)
     badge_y = max(int(m.group(1)) - 18, 18) if m else 242
-    svg = svg.replace("</svg>", f'<text x="20" y="{badge_y}" fill="{color}" font="bold 11px sans-serif">{badge}</text></svg>')
+    svg = svg.replace("</svg>", f'<text x="20" y="{badge_y}" fill="{color}" font-weight="bold" font-size="11px" font-family="sans-serif">{badge}</text></svg>')
     return svg

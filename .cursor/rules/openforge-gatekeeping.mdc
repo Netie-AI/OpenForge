@@ -1,0 +1,83 @@
+---
+description: OpenForge always-on gatekeeping anchor and subagent evidence policy
+alwaysApply: true
+---
+
+# OpenForge — gatekeeping anchor
+
+Read in order before any phase work: `docs/HANDOFF.md` -> `docs/STATUS.md` -> `AGENT_PLAN.md` §0 -> the relevant Lead doc under `docs/experts/` if the task is design/sizing/layout judgment.
+
+For the full evidence protocol (Gate A/B/C definitions, the Evidence Bundle template, Claude/Cursor response templates), load the `openforge-conventions` skill — this rule only states non-negotiables that must always be in context:
+
+1. **Evidence beats claims.** Never report "tests passed," "design works," or "verified" without actual command output, diff, or artifact path attached. If something was not run, say `not verified` explicitly.
+2. **No second looser tolerance.** Never relax a spec tolerance to make a result pass. Flag the miss and why it misses.
+3. **Reconcile seed claims.** If a result has both a locked gate seed and a broader sweep, report both numbers in one sentence (for example, "seed=42 passes; 3/5 sweep robustness").
+4. **Sourcing boundary.** Public datasheets, academic papers, and genuinely open-source EDA tooling (ngspice, Magic, Netgen, OpenROAD, KLayout) are allowed. Cadence or Synopsys source code, internals, or any proprietary/NDA-covered material is forbidden.
+5. **Out of scope until explicitly reopened by Claude/Jian Hong:** PCIe/HBM PHY, SerDes, standard-cells, high-speed IO, full auto-layout, DRC/LVS without layout existing, and any self-triggering/autonomous research loop. Check `docs/PARKING_LOT.md` before assuming work is greenlit.
+
+## Schematic semantic non-negotiables
+
+When any change touches schematic capture/rendering (`openanalog/eda/`, web schematic path, or schematic tests):
+
+1. **Pin semantics over net name shortcuts.** Do not collapse duplicate-pin devices (for example MOS diode ties). Terminal handling must preserve explicit pin identity (`d/g/s`, `p/n`) even when node names are equal.
+2. **Device orientation correctness.** PMOS source-facing side must connect toward VDD rails; NMOS source-facing side must connect toward GND rails unless explicitly documented otherwise.
+3. **Render-path truth.** Verification is only acceptable with the same code path used by browser rendering plus an attached regenerated SVG artifact.
+4. **Geometry guardrail.** No non-axis-aligned signal segments; passive terminal stubs must terminate on their named net.
+5. **No silent evidence downgrade.** If tangling score thresholds are adjusted, attach rationale and pair it with stronger semantic checks; never present threshold loosening as a quality improvement by itself.
+
+## Subagent reporting requirement
+
+Any subagent invoked in this repo reports using the Evidence Bundle format (Scope / Diff / Verification / Artifacts / Not Verified / Notes) from the `openforge-conventions` skill. If a report is not evidence-shaped, treat it as a failed run.
+
+## Parallel work boundary
+
+Read-only subagents (research, literature/datasheet survey, independent verification reruns) are safe to run in parallel with active work. Subagents that write to `forge/`, `sizer/`, or any design/topology source file are not safe to run in parallel with other writers and must be sequenced.
+Do not run `cursor-executor` in parallel with any other writing agent; only one writing stream may run at a time.
+
+Use composer-fast defaults for parallel-safe exploratory streams, then require `dv-verifier` blocking evidence before any gate claim.
+
+## Parent mode routing
+
+Use the parent model tier to decide collaboration mode:
+
+| Parent mode | Default subagent model | Gate behavior |
+|---|---|---|
+| **Composer parent** | `composer-2.5-fast` | Must package OF-C2C + Evidence Bundle and send to Claude reviewer before advancing gate-critical claims |
+| **Non-composer parent** (e.g. Codex high) | `inherit` allowed, or explicit composer override | Cursor can complete executor + `dv-verifier` + parent re-run locally; external Claude review optional unless user asks |
+| **Ask/read-only parent** | read-only only | No writing agent (`cursor-executor`) unless parent explicitly switches to writing-capable mode |
+
+## Gate-critical trigger definition
+
+Treat work as gate-critical if any is true:
+- changes `docs/STATUS.md` gate rows or claims phase status change,
+- uses `scripts/verify_phase*.py`, `verify_cmrr.py`, `verify_psrr.py`, or equivalent acceptance script,
+- reports `meets_all` as acceptance evidence,
+- introduces/changes a testbench metric intended for envelope decisions.
+
+## Autonomy and reversibility
+
+Cursor may orchestrate, research, and scale work without waiting for Claude sign-off at every step. Composer-mode flows still require Claude verification before gate progression; non-composer local flows may close locally with `dv-verifier` + parent re-run evidence.
+
+**Git reversibility is necessary, not sufficient. Do not treat "it can be reverted" as equivalent to "it is safe."** Reversibility answers whether a bad commit can be undone. It does not answer:
+
+- Whether anyone notices the commit was wrong before something else builds on it (a forge run, a training corpus write, a status claim in `docs/HANDOFF.md`).
+- The compute/time already spent (ngspice batch runs, scraping, training cycles) that a revert does not refund.
+- The documented failure mode of this project: a result that passes existing checks and is still wrong (stale measurement deck, loose tolerance, placeholder model mistaken for real data). This is a review failure, not a revert-availability failure, and reversibility does nothing to catch it.
+
+**Model tiering (default, override logged explicitly if changed):**
+
+- **Composer-class (`composer-2.5-fast`) is default for composer-mode orchestration** — proposers, research, `cursor-executor`, and the single blocking gate `dv-verifier`. One extra parent re-run of verify commands after subagents return; do not trust subagent stdout alone.
+- **`local-reviewer`** — optional pre-filter only; not a second blocking gate. Default stack: executor → `dv-verifier` → parent re-run.
+- **`session-scribe`** — background Composer; writes `docs/research/testbench_learnings/` only after gate runs.
+- **Parent / human review** — strongest model when orchestrating or closing phase gates. In composer-mode, Claude verification is mandatory before gate progression. Record decisions in testbench learnings when parent tier differs from composer subagents.
+- Override non-default subagent models only with explicit logged reason in HANDOFF — not default drift.
+
+Scale parallel research freely. Keep the write step single-threaded, gated on `dv-verifier` + parent re-run before any result is treated as real.
+
+## GitHub PR / CI (when push granted)
+
+When the user grants push permission for a gate-closing branch:
+- Cursor may `git push` and open or update a PR via `gh` **without re-confirming each step**.
+- Load `GITHUB_TOKEN` from gitignored `env.local` into `GH_TOKEN` for `gh` — **never commit, echo, or paste tokens** (`env.local` is in `.gitignore`).
+- Default repo: `Netie-AI/OpenForge` (match remote casing; not `Netie-Ai`).
+- After PR opens, check `gh pr checks`; log green `sky130-bsim-smoke` Actions run URL in `docs/STATUS.md` before claiming BSIM CI closed.

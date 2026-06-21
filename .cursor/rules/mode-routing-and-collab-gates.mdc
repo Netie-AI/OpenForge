@@ -1,0 +1,31 @@
+---
+description: Route orchestration by parent model mode and enforce collaboration gates.
+alwaysApply: true
+---
+
+# Mode Routing and Collaboration Gates
+
+Use this routing policy on every orchestration task:
+
+## Owner shorthand intent (mandatory)
+
+- If user says **"continue"**: treat as **execute now** against current highest-priority next step. Do not return plan-only text unless blocked.
+- If user says **"continue and next window"**: execute current step, then provide a short next-window handoff snippet that names:
+  - next target files,
+  - required skills/rules to load,
+  - agent pipeline order for the next step.
+- If both appear with no further constraints, default to: execute -> verify -> update docs -> emit next-window snippet.
+
+1. **Composer parent mode**
+   - Default all subagents to `composer-2.5-fast`.
+   - Gate-critical claims must include OF-C2C + Evidence Bundle and be sent for Claude verification before proceeding.
+
+2. **Non-composer parent mode** (for example Codex high)
+   - Subagents may inherit parent model.
+   - Cursor can execute end-to-end locally with `cursor-executor` -> `dv-verifier` (blocking) -> parent verify re-run.
+   - External Claude review is optional unless user explicitly requests it.
+
+3. **Any mode**
+   - One writer at a time.
+   - Never skip `dv-verifier` on gate-critical claims.
+   - If model overrides are used, record reason in `docs/HANDOFF.md`.

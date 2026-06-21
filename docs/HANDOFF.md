@@ -1,9 +1,11 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-19 (session)  
-**HEAD:** `a9fba7f` — copy-chat task + doc anchor hierarchy pushed.
+**Updated:** 2026-06-20 (review tone + OF-C2C Why field; BSIM CI verified; tangling ≤3)  
+**HEAD (local):** `b062150` on `feat/schematic-orthogonal-router` (pushed)
 
-**Read order:** this file → `docs/STATUS.md` → `AGENT_PLAN.md` §0 → `.cursor/.skills/SKILL.md` (Cursor conventions).
+**Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
+
+**Read order:** this file → `docs/STATUS.md` → `docs/PARKING_LOT.md` → `AGENT_PLAN.md` §0 → `.cursor/skills/openforge-conventions/SKILL.md` → `.cursor/skills/mode-routing/SKILL.md`
 
 Use this file at the **start of every new Cursor window**.
 
@@ -23,14 +25,45 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Priority | Task | Gate |
 |----------|------|------|
-| **Now** | Phase 3 exit | vref on SKY130 BJTs + BSIM CI job (after local stability) |
-| Done | Switch Ron BSIM seed sweep | 5/5 pass — `scripts/verify_phase3_switch_bsim_seeds.py` |
-| Done | Pin SKY130 models | `v0.13.0` / `2997061e…` in fetch script + `PIN.txt` |
-| Done | Opamp AOL on BSIM | 5/5 smoke; seed=42 gate; 3/5 seed sweep (reconciled in STATUS) |
-| Done | Copy Cursor chat | `scripts/copy_cursor_chat.py` + task **Copy Cursor Chat** (`Ctrl+Shift+Alt+C` in user keybindings) |
-| Done | Cursor conventions doc | `.cursor/.skills/SKILL.md` — evidence gatekeeper; not an Anthropic Skill |
-| Not yet | Phase 4 / Phase 5 | Do **not** start until Phase 3 exit |
-| Deferred | Advanced-node PDK survey | Research doc only (`docs/research/ADVANCED_NODE_SURVEY.md`) — after Phase 3 close; lambdapdk/ASAP7 not analog SPICE |
+| **1** | ~~**BSIM CI proof via PR**~~ | **Done 2026-06-20:** [PR #1](https://github.com/Netie-AI/OpenForge/pull/1); [Actions #27875600582](https://github.com/Netie-AI/OpenForge/actions/runs/27875600582) — `sky130-bsim-smoke` + `test` **pass** |
+| **2** | **CMRR — parked (Option B honest partial)** | RL=10k fixture run complete (dv-verifier confirmed): **152.0→127.4 dB** (−24.6 dB, CM-path only); **47 dB above** RS321 typ. **Stop CMRR churn** until Monte Carlo Phase 4+. |
+| **3** | **UI E2E (human tick)** | `docs/UI_E2E_CHECKLIST.md` — agent PASS 2026-06-20; footer git hash DOM bug optional fix |
+| **4** | ~~**Schematic tangling — Cc passive tap**~~ | **Done 2026-06-20:** `schematic_router.py` passive second pass; **`crossing_score` 6→3**; pytest **19/19** |
+| Parking lot | Generative layout pilot (ALIGN/MAGICAL) | Phase 7+ — see `docs/research/GENERATIVE_ANALOG_LAYOUT_SURVEY.md`; after BSIM CI PR |
+
+**Do NOT start:** Phase 4/5, LoRA, cross-repo Cursor brain, layout/DRC/LVS, PLL/SerDes/standard-cells/high-speed IO (`PARKING_LOT.md` § out of scope).
+
+### Phase 3 vref — decision locked (**Option B**, 2026-06-20)
+
+**Evidence:** `scripts/diag_vref_iq_breakdown.py` + `scripts/verify_phase3_vref.py` (end-to-end; exit 1 on iq = honest fail, not crash).
+
+| Run | iq µA | vref V | line_reg mV |
+|-----|-------|--------|-------------|
+| defaults | 203.8 | 1.146 | 1.30 |
+| manual amp floor (`iref_amp=1 µA`) | **166.0** | 1.152 | 0.69 |
+| sized (seed=42, budget=80) | 138.5 | 1.196 | 1.25 |
+
+**Verdict:** iq **not closable by sizing alone** — structural floor ~166 µA (PMOS mirror + BJT stack). Dead `ibias_uA` sizer knob removed.
+
+**Decision: Option B — honest partial.** Topology + real error amp validated; **iq remains open** on level-1 BJT placeholders. Do **not** burn seeds or param sweeps on iq now. Revisit **Option A** (bias architecture redesign) only when (1) RS431 iq is a hard demo gate, or (2) real SKY130 BJT cards land.
+
+**Next engineering:** PVT/testbench expansion (not vref iq redesign).
+
+### Recently done (this session chain)
+
+| Item | Notes |
+|------|-------|
+| 0.7 connectivity + IO stubs | Verifier caught 16px gap; tests 10/10 |
+| 0.8 stub-then-fold sign-off | Parent + `dv-verifier` rerun complete: `pytest tests/test_schematic_connectivity.py -v` **14/14 pass**; `logs/schematic_0.8_*.svg` vs 0.7 confirms terminal-stub deltas (`0→21`, `0→20`) |
+| UI hotfix | `renderError()` restored after JS corruption |
+| Docs | `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `SESSION_NOTES.md`, etc. |
+| VCVS → real error amp | vref topology validated; **iq still open** |
+| BSIM smoke + CI wiring | Local rerun at `85a8d51`: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` = **5/5 pass** (`vref` deferred); `.github/workflows/ci.yml` includes `sky130-bsim-smoke` job — **Actions URL not verified** (needs PR; branch has no PR runs yet) |
+| CMRR tail/bias sweep | `diag_opamp_cmrr_breakdown.py` rerun: Lb sweep **159.5→125.5 dB** (0.5→8 µm); rl10k fixture **15–25 dB** below open-loop on defaults. Policy lock **reverted** — fixture decision held until causal story + datasheet equivalence |
+| CMRR RL=10k fixture (authorized one-shot) | `diag_opamp_cmrr_fixture.py`: defaults **152.0→127.4 dB** (−24.6 dB); still **47 dB above** RS321 typ 80 dB. **Option B parked** — stop churn until Monte Carlo Phase 4+ |
+| Schematic Miller passive tap | `route_nets()` second pass for 2-terminal C/R; **`crossing_score` 6→3**; `tests/test_schematic_no_tangling.py` bound tightened to ≤3 |
+| Agentic EDA survey | `docs/research/AGENTIC_EDA_SURVEY.md` |
+| Cursor conventions | `.cursor/skills/openforge-conventions/SKILL.md` |
 
 ---
 
@@ -44,6 +77,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 | 0.5 rendering | ✅ |
 | 0.6 schematic floorplan | ✅ |
 | 0.7 connectivity verification | ✅ |
+| 0.8 gate-stub-then-fold router | ✅ signed off (parent + `dv-verifier` + artifact compare) |
 | CI on Linux + ngspice behavioral job | ✅ |
 
 ### Phase 1 — THE GATE (four dev-mode categories vs `spec_envelopes.py`)
@@ -68,9 +102,14 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 # Simulation venv (WSL)
 wsl -d Ubuntu bash -lc "cd /mnt/c/Users/oojia/OpenForge && source .venv_wsl/bin/activate && python scripts/verify_phase1c.py"
 
-# Web server (Windows; port 8080 often blocked — use 8090)
-$env:OPENFORGE_WSL_DISTRO='Ubuntu'
-.\.venv_train\Scripts\python.exe -m openanalog serve --host 127.0.0.1 --port 8090
+# Web server (Windows)
+cd C:\Users\oojia\OpenForge
+.venv\Scripts\Activate.ps1
+python -m openanalog.web
+# → http://127.0.0.1:8080  (added openanalog/web/__main__.py this session)
+
+# Alternate port if 8080 blocked
+python -m openanalog serve --host 127.0.0.1 --port 8090
 
 # Full smoke (WSL)
 make smoke-wsl
@@ -102,7 +141,145 @@ python -m pytest tests/test_ngspice_behavior.py -v
 
 ---
 
-## Copy-paste prompt — next Cursor window (Phase 3 exit)
+## What this session closed vs left open
+
+### Closed (with evidence)
+- **0.7 verifier:** IO stubs must reach terminals; parser fix for `class="signal-wire io-stub"`; tests caught 16px gap then passed after fix.
+- **SVG emitter:** Valid CSS classes; dynamic IO stub coords; golden logs `logs/schematic_0.7_*.svg`.
+- **0.8 router + sign-off:** `terminal_stub()` + orthogonal routing — `logs/schematic_0.8_orthogonal_*.svg`; parent + `dv-verifier` rerun `pytest tests/test_schematic_connectivity.py -v` (14/14), with SVG compare showing terminal-stub markers in 0.8 only.
+- **UI hotfix:** Restored `renderError()` after JS corruption; `node --check` on embedded script.
+- **Docs:** `PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `analog_design_rules.md` (stub rule), `SESSION_NOTES.md`, `VERIFY_BRIEF.md`.
+
+### Open (real gates)
+- **PVT / testbench metrics** — **PSRR @ 100 Hz landed** with W3 causal story (`verify_psrr.py`). **CMRR bench `partial`** — normalization fixed, tail/bias sweep shows Lb is dominant knob, but **152 dB open-loop magnitude not physically credible** on bundled models; RL=10k drops ~25 dB but still >>80 dB typ. **No fixture policy lock.** See `semicon-log.md` entry 6.
+- **BSIM in CI** — `sky130-bsim-smoke` job at `ef43ef6`; docs sync through `85a8d51`; local WSL smoke **5/5** at `85a8d51`; **Actions URL not verified** (workflow runs on PR only; no PR runs yet).
+- **Schematic tangling residual** — `tests/test_schematic_no_tangling.py` **5/5**; chosen variant `tail_aligned`, `nb` x-span **300→174**; `crossing_score=6` (target `<=3`) — next: Cc passive tap second pass.
+- **vref iq** — documented open (Option B); verify gate exits 1 honestly — not a sizing sprint. Three untracked `scripts/diag_vref_*.py` files (`topology`, `selfbias_pnp`, `tune`) are **pre–Option B historical exploration** (alternate bandgap topologies / PNP paths); **not authorized reopening** — do not run for iq sizing; delete or move to `scripts/archive/` in a future cleanup pass.
+
+### Discipline reminders
+- Passing connectivity tests ≠ schematic looks good ≠ UI loads.
+- UI churn caused a startup crash — always run `UI_E2E_CHECKLIST.md` after `index.html` edits.
+- Generic external roadmaps restate `AGENT_PLAN.md` — fold to parking lot, don’t panic-replan.
+- Governance ownership lock: treat `.cursor/agents/`, `.cursor/rules/`, and `.cursor/skills/` as owner-managed; executor agents do not modify them unless explicitly instructed by owner.
+- Mode routing: composer-mode requires Claude verification before gate progression; non-composer (Codex) mode may complete locally with `dv-verifier` + parent re-run evidence.
+- Shorthand contract: user `continue` = execute next step now; user `continue and next window` = execute now and output next-window snippet (files + skills/rules + agent pipeline).
+
+---
+
+## Findings closure (Claude review — 2026-06-20)
+
+**Accepted with evidence:**
+
+| Finding | Verdict | Evidence |
+|---------|---------|----------|
+| 0.8 orthogonal routing (stub-then-fold) | ✅ **working** | `schematic_router.py` + `route_nets()` in render path; connectivity **14/14** |
+| Root cause = **placement distance** on `nb` net (M8/M5/M7), not draw bug | ✅ **confirmed** | Topology ties in `opamp.py`; floorplan zones in `schematic_layout.py`; `tail_aligned` drops `nb` x-span **300→174** |
+| 0.8 improved **routing style**, not placement root cause | ✅ **confirmed** | SVG deltas: opamp `terminal_stub` 0→21, comparator 0→20; io-stub unchanged 3→3 |
+| Cherry-pick integration (geometry + variant scoring + tests) | ✅ **landed** | `ef43ef6`: `schematic_geometry.py`, `_STAGE2_VARIANTS`, `tests/test_schematic_no_tangling.py` **5/5** |
+| `files/` bundle standalone | ⚠️ **reference-only** | `files/test_schematic_no_tangling.py` fails `<=3` (score=6); `standalone_integration_smoke.py` expects `isolated` winner — production picks `tail_aligned` |
+| Residual tangling | ⚠️ **partial** | `crossing_score=6` (target ≤3); next cut: Cc passive tap second pass |
+
+**Do not:** wholesale replace `openanalog/eda/schematic_layout.py` with `files/schematic_layout.py`.
+
+---
+
+## Tangling next cut (planned — after BSIM CI PR)
+
+**Current (partial):** variant `tail_aligned`; `nb` x-span **300→174**; `crossing_score=6` (target `<=3`). Tests: `test_schematic_no_tangling.py` **5/5**, `test_schematic_connectivity.py` **14/14**.
+
+**Architecture boundary (do not break):** keep production `route_nets()` in `schematic_router.py`; placement scoring stays in `schematic_layout.py` via `_choose_opamp_variant()`.
+
+**Next iteration steps:**
+1. **Cc passive tap second pass** — after primary `route_nets(layout.placed)`, route Miller cap (`Cc`) as short orthogonal taps on already-routed `vout`/`nout1` nets (localized stubs near M6/M7), not as a competing long net through the floorplan core.
+2. **Re-score with `schematic_geometry.score_layout`** — objective remains `crossing_score + span_penalty` for `nb`; accept only if `crossing_score` drops toward `<=3`.
+3. **Guard rails** — no wholesale merge from `files/schematic_layout.py`; `files/` `<=3` assertion is reference-only until adapted to production API.
+4. **Verify gate** — `pytest tests/test_schematic_no_tangling.py -q` and `pytest tests/test_schematic_connectivity.py -v` must stay green before any STATUS upgrade from `partial`.
+
+---
+
+## Review tone (added 2026-06-20)
+
+Claude's reviewer voice: warm, proud, invested — a high-standards mentor, not a clinical gate-checker. Findings get framed as guiding questions before verdicts. Praise is genuine and specific when evidence earns it.
+
+Cursor's executor voice: a driven junior who explains *why* — not just what was done, but why this approach over the alternatives, and what you'd reconsider if it comes back wrong. Evidence requirements (verbatim output, dv-verifier, no scope creep) are unchanged.
+
+---
+
+## Copy-paste — next **Cursor** window (executor)
+
+```
+Protocol: OF-C2C-v1
+Role: Cursor executor
+Intent: execution
+
+Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md,
+  .cursor/skills/openforge-conventions/SKILL.md, .cursor/skills/mode-routing/SKILL.md
+
+Review tone: explain WHY (approach vs alternatives, tradeoffs, what you'd reconsider).
+Evidence bar unchanged: verbatim output, dv-verifier on gate-critical, no scope creep.
+
+Branch: feat/schematic-orthogonal-router @ b062150 (PR #1 open)
+Gates closed this chain: BSIM CI (Actions #27875600582 green), schematic tangling (score=3).
+Parked: CMRR Option B, vref Option B. Do NOT reopen without Monte Carlo / owner trigger.
+
+Do next (sequenced):
+1. UI E2E human tick (docs/UI_E2E_CHECKLIST.md) — optional footer git hash fix
+2. PVT envelope expansion (PSRR already landed; no CMRR churn)
+3. Parking lot only after above — no Phase 4/5, LoRA, layout integration
+
+Do NOT: edit .cursor/agents|rules|skills unless owner explicitly instructs.
+If user says "continue", execute next priority now (not plan-only).
+If user says "continue and next window", execute + emit next-window snippet.
+
+Required in every executor reply: Why / thought process (1-3 sentences).
+Env: WSL Ubuntu + .venv_wsl for ngspice; GH token from gitignored env.local if gh needed.
+```
+
+---
+
+## Copy-paste — next **Claude** window (reviewer / gatekeeper)
+
+```
+Protocol: OF-C2C-v1
+Role: Claude reviewer
+Intent: review
+
+Read first: docs/HANDOFF.md, docs/STATUS.md, docs/PARKING_LOT.md, docs/semicon-log.md
+
+Review tone: warm mentor, high standards — guiding questions before verdicts;
+  specific praise when evidence earns it. Evidence bar unchanged.
+
+Honest gate state (@ b062150):
+- 0.8 router: working (14/14 connectivity)
+- Schematic tangling: met (crossing_score=3, target <=3)
+- BSIM CI: verified — PR #1, Actions #27875600582 green (sky130-bsim-smoke pass)
+- CMRR: Option B parked (mismatch ceiling; no churn until Monte Carlo Phase 4+)
+- vref: Option B locked (iq open on placeholder BJTs)
+- Layout / Phase 4-5: parking lot
+
+When Cursor returns work, check: verbatim output, diff, STATUS consistency,
+  Why/thought-process section present, no scope creep, suspiciously good numbers get MORE scrutiny.
+
+Push back on: CMRR reopen without MC, vref Option A without trigger, fixture policy lock,
+  governance file edits without explicit owner ask.
+```
+
+---
+
+## Key files touched recently
+
+| Area | Files |
+|------|-------|
+| Schematic 0.7/0.8 | `openanalog/eda/schematic_layout.py`, `schematic_router.py`, `schematic_connectivity.py`, `symbols.py` |
+| Tests | `tests/test_schematic_connectivity.py` |
+| Golden SVGs | `logs/schematic_0.7_*.svg`, `logs/schematic_0.8_orthogonal_*.svg` |
+| Web UI | `openanalog/web/index.html`, `app.py`, `__main__.py` |
+| Docs | `docs/PARKING_LOT.md`, `UI_E2E_CHECKLIST.md`, `SESSION_NOTES.md`, `analog_design_rules.md`, `VERIFY_BRIEF.md` |
+| Phase 3 vref | `scripts/verify_phase3_vref.py`, `docs/semicon-log.md` |
+
+---
+
+## Copy-paste prompt — legacy (Phase 3 only)
 
 ```
 Read docs/HANDOFF.md and docs/STATUS.md first.
@@ -110,7 +287,7 @@ Read docs/HANDOFF.md and docs/STATUS.md first.
 Phase 1–2 closed. Phase 3: BSIM 5/5 smoke on pinned v0.13.0 (local only).
 Evidence: evidence/phase3_*_2026-06-19.log
 
-Next: vref bandgap on SKY130 BJTs; then BSIM CI job (not before local stable).
+Next (legacy note): vref bandgap on SKY130 BJTs, then BSIM CI follow-up. Current active priority is higher in this file: capture first green pushed-HEAD `sky130-bsim-smoke` Actions proof URL.
 Do NOT start Phase 4/5 or LoRA training.
 Zero-trust: done = real artifacts checked, not summaries.
 Environment: WSL Ubuntu, .venv_wsl, OPENFORGE_WSL_DISTRO=Ubuntu.

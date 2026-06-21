@@ -149,14 +149,15 @@ def api_meta() -> dict[str, Any]:
         ],
         "model_sets": ["bundled", "sky130"],
         "default_model_set": MODEL_SET,
+        "model_set_label": "OpenForge L1 (bundled level-1 MOSFET models)",
         "achievable_ranges": achievable_ranges_payload(),
         **use_cases_payload(),
+        **presets_payload(),
         "version": {
             "git_hash": _git_short_hash(),
             "build_date": _build_date(),
             "pdk_mode": MODEL_SET,
         },
-        **presets_payload(),
     }
 
 
@@ -383,8 +384,8 @@ def api_last_design() -> JSONResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    return INDEX_HTML
+    # Reload on each request so local UI edits show without restarting serve.
+    return (_WEB_DIR / "index.html").read_text(encoding="utf-8")
 
 
 _WEB_DIR = Path(__file__).parent
-INDEX_HTML = (_WEB_DIR / "index.html").read_text(encoding="utf-8")

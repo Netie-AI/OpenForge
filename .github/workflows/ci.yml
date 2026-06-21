@@ -25,3 +25,20 @@ jobs:
         env:
           OPENFORGE_MODEL_SET: bundled
         run: python -m pytest tests/test_ngspice_behavior.py -q
+
+  sky130-bsim-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ngspice
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ngspice
+      - name: Install Python deps
+        run: pip install -e ".[web]" pytest
+      - name: SKY130 BSIM smoke (Phase 3 gate)
+        env:
+          OPENFORGE_MODEL_SET: sky130
+          OPENFORGE_SKY130_CARD: bsim
+        run: python scripts/smoke_all.py 80

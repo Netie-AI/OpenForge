@@ -23,8 +23,23 @@ checkpoint.json
 data/kg/
 *.sp
 .cursor/*
-!.cursor/.skills/
-!.cursor/.skills/**
+# Owner-managed governance artifacts:
+# agent/rule/skill content is maintained only by repository owner.
+# (Tracked files remain tracked; this blocks accidental new files here.)
+.cursor/agents/
+!.cursor/rules/
+.cursor/rules/*
+!.cursor/rules/mode-routing-and-collab-gates.mdc
+!.cursor/skills/
+.cursor/skills/*
+!.cursor/skills/mode-routing/
+!.cursor/skills/mode-routing/**
+!.cursor/hooks.json
+!.cursor/hooks/
+!.cursor/hooks/**
+.cursor/hooks/session-evidence/
+.cursor/hooks/_hook_test/
+.cursor/hooks/subagent-log.md
 *.egg-info/
 b3v33check.log
 data/api_usage.jsonl

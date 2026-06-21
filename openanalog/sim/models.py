@@ -27,9 +27,9 @@ SKY130_MODELS_BUILTIN = """* openforge sky130 models (level-1 calibrated)
 .model sky130_fd_pr__pfet_01v8 pmos (level=1 vto=-0.60 kp=90u gamma=0.4 phi=0.8
 + lambda=0.03 tox=4.1e-9 cgso=1.5e-10 cgdo=1.5e-10 cj=1e-4 cjsw=5e-10)
 .model sky130_fd_pr__npn_11v0 npn (is=1e-16 bf=100 nf=1.0 vaf=50 ikf=1e-3
-+ cje=10f cjc=10f tf=100p tr=10n)
++ cje=10f cjc=10f tf=100p tr=10n xti=3 eg=1.11)
 .model sky130_fd_pr__pnp_11v0 pnp (is=1e-16 bf=80 nf=1.0 vaf=40 ikf=1e-3
-+ cje=10f cjc=10f tf=100p tr=10n)
++ cje=10f cjc=10f tf=100p tr=10n xti=3 eg=1.11)
 """
 
 NMOS = "nmos_ana"
