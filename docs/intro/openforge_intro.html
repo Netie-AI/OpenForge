@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenForge — Intro</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #05070d;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+  #stage {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    width: min(100vw, 177.78vh);
+    height: min(56.25vw, 100vh);
+    display: block;
+    background: #05070d;
+    box-shadow: 0 0 120px rgba(0,0,0,0.8);
+  }
+  #ui {
+    position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; align-items: center; z-index: 10;
+    opacity: 0.85;
+  }
+  button {
+    background: rgba(20,30,48,0.85);
+    color: #cfe8ff;
+    border: 1px solid #2a6df0;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+  button:hover { background: #16243c; }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="c" width="1280" height="720"></canvas></div>
+  <div id="ui">
+    <button id="replay">&#9654; Replay</button>
+  </div>
+<script>
+(() => {
+  const W = 1280, H = 720;
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  // Offscreen full-res scene buffer + downscale buffer for pixelation.
+  const off = document.createElement('canvas'); off.width = W; off.height = H;
+  const octx = off.getContext('2d');
+  const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
+  const ttx = tmp.getContext('2d');
+
+  // ---- helpers -------------------------------------------------------------
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const easeInOut = t => t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+
+  // alpha for an active window [a,b] with fade in/out
+  function win(t, a, b, fi = 0.5, fo = 0.5) {
+    if (t <= a - fi || t >= b + fo) return 0;
+    if (t < a) return clamp((t - (a - fi)) / fi, 0, 1);
+    if (t > b) return clamp(1 - (t - b) / fo, 0, 1);
+    return 1;
+  }
+
+  const COL = {
+    bg0: '#070b14', bg1: '#0c1424',
+    cyan: '#39d6ff', blue: '#2a6df0', teal: '#1ce0c3',
+    gold: '#ffc24d', red: '#ff5a6e', green: '#5dffa0',
+    text: '#dbeeff', dim: '#5a7596'
+  };
+
+  // Timeline (seconds)
+  const T = {
+    promptIn: 0.4, promptType: [0.6, 2.6], promptHold: 3.0,
+    cityA: 4.4, cityB: 7.2,
+    virtA: 7.2, virtB: 10.6,
+    chipA: 10.6, chipB: 13.8,
+    brandA: 13.4, end: 16.5
+  };
+
+  const PROMPT = "Hey Forge, create a low-power analog MAC";
+
+  // ---- background ----------------------------------------------------------
+  function drawBackground(c, t) {
+    const g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, COL.bg1); g.addColorStop(1, COL.bg0);
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    // faint grid
+    c.save();
+    c.globalAlpha = 0.10; c.strokeStyle = COL.blue; c.lineWidth = 1;
+    const step = 40, off = (t * 8) % step;
+    for (let x = -off; x < W; x += step) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    for (let y = -off; y < H; y += step) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+    c.restore();
+  }
+
+  function vignette(c) {
+    const g = c.createRadialGradient(W/2, H/2, H*0.25, W/2, H/2, H*0.85);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+  }
+
+  // ---- scene 1: prompt -----------------------------------------------------
+  function drawPrompt(c, t, alpha) {
+    c.save(); c.globalAlpha = alpha;
+    // chat bubble bar
+    const bw = 760, bh = 92, bx = (W - bw) / 2, by = H/2 - 30;
+    roundRect(c, bx, by, bw, bh, 16);
+    c.fillStyle = 'rgba(16,26,44,0.92)'; c.fill();
+    c.lineWidth = 2; c.strokeStyle = COL.blue; c.stroke();
+    // forge spark icon
+    c.fillStyle = COL.cyan;
+    c.beginPath();
+    c.moveTo(bx + 36, by + bh/2 - 16); c.lineTo(bx + 52, by + bh/2 - 16);
+    c.lineTo(bx + 42, by + bh/2 + 2); c.lineTo(bx + 56, by + bh/2 + 2);
+    c.lineTo(bx + 34, by + bh/2 + 22); c.lineTo(bx + 40, by + bh/2 + 2);
+    c.lineTo(bx + 28, by + bh/2 + 2); c.closePath(); c.fill();
+    // typed text
+    const span = T.promptType[1] - T.promptType[0];
+    const prog = clamp((t - T.promptType[0]) / span, 0, 1);
+    const n = Math.floor(prog * PROMPT.length);
+    const shown = PROMPT.slice(0, n);
+    c.font = '600 28px "Segoe UI", system-ui, sans-serif';
+    c.fillStyle = COL.text; c.textBaseline = 'middle';
+    c.fillText(shown, bx + 78, by + bh/2 + 2);
+    // blinking caret
+    if (Math.floor(t * 2) % 2 === 0 || prog < 1) {
+      const tw = c.measureText(shown).width;
+      c.fillStyle = COL.cyan;
+      c.fillRect(bx + 80 + tw, by + bh/2 - 16, 3, 32);
+    }
+    // hint
+    c.font = '500 16px "Segoe UI", sans-serif';
+    c.fillStyle = COL.dim;
+    c.fillText('OpenForge  ·  natural language  →  silicon', bx + 4, by - 26);
+    c.restore();
+  }
+
+  // ---- scene 2: pixelated transistor city ----------------------------------
+  let CITY = null;
+  function buildCity() {
+    const cols = 26, arr = [];
+    for (let i = 0; i < cols; i++) {
+      arr.push({
+        h: 0.30 + Math.random() * 0.55,
+        delay: Math.random() * 0.5,
+        hue: Math.random(),
+        gates: 2 + Math.floor(Math.random() * 4)
+      });
+    }
+    return arr;
+  }
+  function drawCity(c, t, alpha) {
+    if (!CITY) CITY = buildCity();
+    c.save(); c.globalAlpha = alpha;
+    const p = clamp((t - T.cityA) / (T.cityB - T.cityA), 0, 1);
+    const cols = CITY.length, bw = W / cols, base = H * 0.92;
+    // horizon glow
+    const hg = c.createLinearGradient(0, base - 260, 0, base);
+    hg.addColorStop(0, 'rgba(57,214,255,0)'); hg.addColorStop(1, 'rgba(42,109,240,0.20)');
+    c.fillStyle = hg; c.fillRect(0, base - 260, W, 260);
+    for (let i = 0; i < cols; i++) {
+      const b = CITY[i];
+      const rise = easeOut(clamp((p - b.delay) / (1 - b.delay), 0, 1));
+      const bh = base * b.h * rise;
+      const x = i * bw + 4, y = base - bh, w = bw - 8;
+      // building body = transistor stack
+      const g = c.createLinearGradient(0, y, 0, base);
+      g.addColorStop(0, mix(COL.teal, COL.blue, b.hue));
+      g.addColorStop(1, '#0c2138');
+      c.fillStyle = g; c.fillRect(x, y, w, bh);
+      // gate stripes (poly lines) = transistor look
+      c.fillStyle = 'rgba(5,8,16,0.55)';
+      for (let gI = 1; gI <= b.gates; gI++) {
+        const gy = y + (bh * gI) / (b.gates + 1);
+        c.fillRect(x, gy - 2, w, 4);
+      }
+      // window/contact dots
+      c.fillStyle = 'rgba(255,194,77,0.85)';
+      for (let r = 0; r < Math.floor(bh / 26); r++) {
+        if ((i + r) % 3 === 0) c.fillRect(x + w*0.32, y + 12 + r*26, 5, 5);
+      }
+      // outline
+      c.strokeStyle = 'rgba(57,214,255,0.5)'; c.lineWidth = 1; c.strokeRect(x, y, w, bh);
+    }
+    // caption
+    c.globalAlpha = alpha * clamp((p - 0.5) * 2, 0, 1);
+    c.font = '700 22px "Consolas", monospace';
+    c.fillStyle = COL.cyan; c.textBaseline = 'top';
+    c.fillText('// synthesizing transistor-level topology…', 60, 56);
+    c.restore();
+  }
+
+  // ---- scene 3: Cadence-Virtuoso style analog layout -----------------------
+  function drawVirtuoso(c, t, alpha) {
+    c.save(); c.globalAlpha = alpha;
+    const p = clamp((t - T.virtA) / (T.virtB - T.virtA), 0, 1);
+    const mx = 120, my = 96, mw = W - 240, mh = H - 200;
+    // window chrome
+    roundRect(c, mx, my, mw, mh, 10);
+    c.fillStyle = '#0a1322'; c.fill();
+    c.strokeStyle = '#1d3a63'; c.lineWidth = 2; c.stroke();
+    // title bar
+    c.fillStyle = '#13233d'; roundRectTop(c, mx, my, mw, 38, 10); c.fill();
+    c.fillStyle = COL.text; c.font = '600 16px "Segoe UI", sans-serif'; c.textBaseline = 'middle';
+    c.fillText('Virtuoso®  Layout  —  analog_mac.lay   [low-power]', mx + 18, my + 19);
+    c.fillStyle = COL.red; c.beginPath(); c.arc(mx + mw - 26, my + 19, 6, 0, 7); c.fill();
+    c.fillStyle = COL.gold; c.beginPath(); c.arc(mx + mw - 48, my + 19, 6, 0, 7); c.fill();
+    c.fillStyle = COL.green; c.beginPath(); c.arc(mx + mw - 70, my + 19, 6, 0, 7); c.fill();
+    // layout canvas
+    const lx = mx + 14, ly = my + 50, lw = mw - 28, lh = mh - 64;
+    c.save();
+    c.beginPath(); c.rect(lx, ly, lw, lh); c.clip();
+    c.fillStyle = '#060d18'; c.fillRect(lx, ly, lw, lh);
+    // fine layout grid
+    c.globalAlpha = alpha * 0.5; c.strokeStyle = 'rgba(40,80,140,0.35)'; c.lineWidth = 1;
+    for (let x = lx; x < lx + lw; x += 22) { c.beginPath(); c.moveTo(x, ly); c.lineTo(x, ly+lh); c.stroke(); }
+    for (let y = ly; y < ly + lh; y += 22) { c.beginPath(); c.moveTo(lx, y); c.lineTo(lx+lw, y); c.stroke(); }
+    c.globalAlpha = alpha;
+    // colored "cells" appear progressively (metal layers)
+    const cells = layoutCells(lx, ly, lw, lh);
+    cells.forEach((cell, i) => {
+      const ap = clamp((p * cells.length - i), 0, 1);
+      if (ap <= 0) return;
+      c.globalAlpha = alpha * ap;
+      c.fillStyle = cell.fill; c.fillRect(cell.x, cell.y, cell.w, cell.h);
+      c.strokeStyle = cell.stroke; c.lineWidth = 1.5; c.strokeRect(cell.x, cell.y, cell.w, cell.h);
+    });
+    // orthogonal routing wires (gold) — tie-in to OpenForge's orthogonal router
+    c.globalAlpha = alpha * clamp((p - 0.4) * 1.8, 0, 1);
+    c.strokeStyle = COL.gold; c.lineWidth = 2.5; c.lineJoin = 'miter';
+    routes(lx, ly, lw, lh).forEach(r => {
+      c.beginPath(); c.moveTo(r[0][0], r[0][1]);
+      for (let k = 1; k < r.length; k++) c.lineTo(r[k][0], r[k][1]);
+      c.stroke();
+      r.forEach(pt => { c.fillStyle = COL.gold; c.fillRect(pt[0]-3, pt[1]-3, 6, 6); });
+    });
+    c.restore();
+    c.globalAlpha = alpha * clamp((p - 0.3) * 2, 0, 1);
+    c.font = '700 18px "Consolas", monospace'; c.fillStyle = COL.teal; c.textBaseline = 'top';
+    c.fillText('analog MAC · 8-bit · ngspice-verified', lx + 14, ly + lh - 30);
+    c.restore();
+  }
+
+  function layoutCells(lx, ly, lw, lh) {
+    const fills = ['rgba(42,109,240,0.55)','rgba(93,255,160,0.45)','rgba(255,90,110,0.45)','rgba(255,194,77,0.45)'];
+    const strokes = [COL.blue, COL.green, COL.red, COL.gold];
+    const cells = []; let seed = 7;
+    const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    for (let i = 0; i < 22; i++) {
+      const w = 40 + rnd() * 110, h = 24 + rnd() * 80;
+      const x = lx + 20 + rnd() * (lw - w - 40);
+      const y = ly + 20 + rnd() * (lh - h - 40);
+      const li = Math.floor(rnd() * fills.length);
+      cells.push({ x, y, w, h, fill: fills[li], stroke: strokes[li] });
+    }
+    return cells;
+  }
+  function routes(lx, ly, lw, lh) {
+    const yA = ly + lh*0.28, yB = ly + lh*0.6, yC = ly + lh*0.8;
+    return [
+      [[lx+30,yA],[lx+lw*0.4,yA],[lx+lw*0.4,yB],[lx+lw*0.75,yB]],
+      [[lx+lw*0.15,yC],[lx+lw*0.15,yB],[lx+lw*0.55,yB],[lx+lw*0.55,yA]],
+      [[lx+lw*0.6,yC],[lx+lw*0.85,yC],[lx+lw*0.85,yA]]
+    ];
+  }
+
+  // ---- scene 4: tape-out → chip --------------------------------------------
+  function drawChip(c, t, alpha) {
+    c.save(); c.globalAlpha = alpha;
+    const p = clamp((t - T.chipA) / (T.chipB - T.chipA), 0, 1);
+    const cx = W/2, cy = H/2 - 10;
+    const s = lerp(0.55, 1, easeInOut(clamp(p*1.4,0,1)));
+    const pkg = 300 * s;
+    // package body
+    c.save(); c.translate(cx, cy);
+    // pins
+    const pins = 11, pl = 26 * s, gap = (pkg) / pins;
+    c.fillStyle = '#d9b25a';
+    for (let i = 0; i < pins; i++) {
+      const o = -pkg/2 + gap*(i+0.5);
+      c.fillRect(o-5, -pkg/2 - pl, 10, pl);
+      c.fillRect(o-5, pkg/2, 10, pl);
+      c.fillRect(-pkg/2 - pl, o-5, pl, 10);
+      c.fillRect(pkg/2, o-5, pl, 10);
+    }
+    // body
+    const g = c.createLinearGradient(-pkg/2,-pkg/2,pkg/2,pkg/2);
+    g.addColorStop(0,'#1b1f26'); g.addColorStop(1,'#0a0c10');
+    c.fillStyle = g; roundRectAt(c, -pkg/2, -pkg/2, pkg, pkg, 14); c.fill();
+    c.strokeStyle = '#3a4150'; c.lineWidth = 2; c.stroke();
+    // die in center
+    const die = pkg*0.62;
+    const dg = c.createLinearGradient(-die/2,-die/2,die/2,die/2);
+    dg.addColorStop(0, COL.blue); dg.addColorStop(0.5,'#123a6b'); dg.addColorStop(1, COL.teal);
+    c.fillStyle = dg; c.fillRect(-die/2,-die/2,die,die);
+    // die traces
+    c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1;
+    for (let i=1;i<6;i++){ const o=-die/2+die*i/6;
+      c.beginPath();c.moveTo(o,-die/2);c.lineTo(o,die/2);c.stroke();
+      c.beginPath();c.moveTo(-die/2,o);c.lineTo(die/2,o);c.stroke(); }
+    // notch / pin-1 dot
+    c.fillStyle = COL.gold; c.beginPath(); c.arc(-pkg/2+22,-pkg/2+22,7,0,7); c.fill();
+    // engraving
+    c.fillStyle = '#9fb6d4'; c.font = `700 ${20*s}px "Consolas", monospace`;
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillText('OPENFORGE', 0, -8*s); 
+    c.font = `500 ${13*s}px "Consolas", monospace`; c.fillStyle='#7c93b3';
+    c.fillText('ANALOG-MAC · LP', 0, 16*s);
+    c.restore();
+
+    // TAPE OUT stamp
+    const sa = clamp((p-0.45)/0.3, 0, 1);
+    if (sa > 0) {
+      c.save(); c.globalAlpha = alpha * sa;
+      c.translate(cx + 250, cy - 150); c.rotate(-0.32);
+      c.strokeStyle = COL.red; c.lineWidth = 4;
+      roundRectAt(c, -110, -34, 220, 68, 8); c.stroke();
+      c.fillStyle = COL.red; c.font = '800 34px "Segoe UI", sans-serif';
+      c.textAlign='center'; c.textBaseline='middle';
+      c.fillText('TAPE-OUT', 0, 2);
+      c.restore();
+    }
+    c.restore();
+  }
+
+  // ---- branding overlay (crisp, drawn on main) -----------------------------
+  function drawBrand(c, t, alpha) {
+    c.save(); c.globalAlpha = alpha;
+    const cx = W/2;
+    c.textAlign = 'center';
+    c.font = '800 64px "Segoe UI", system-ui, sans-serif';
+    const grad = c.createLinearGradient(cx-200, 0, cx+200, 0);
+    grad.addColorStop(0, COL.cyan); grad.addColorStop(1, COL.teal);
+    c.fillStyle = grad; c.textBaseline = 'middle';
+    c.fillText('OpenForge', cx, H/2 + 150);
+    c.font = '500 22px "Segoe UI", sans-serif'; c.fillStyle = COL.text;
+    c.fillText('from natural language to silicon', cx, H/2 + 196);
+    c.font = '600 18px "Consolas", monospace'; c.fillStyle = COL.dim;
+    c.fillText('github.com/Netie-AI/OpenForge', cx, H/2 + 232);
+    c.restore();
+  }
+
+  function drawWordmark(c, alpha) {
+    c.save(); c.globalAlpha = alpha;
+    c.font = '700 22px "Segoe UI", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
+    // spark
+    c.fillStyle = COL.cyan;
+    c.beginPath();
+    c.moveTo(40, 30); c.lineTo(52, 30); c.lineTo(44, 42);
+    c.lineTo(56, 42); c.lineTo(34, 62); c.lineTo(42, 42);
+    c.lineTo(32, 42); c.closePath(); c.fill();
+    c.fillStyle = COL.text; c.fillText('OpenForge', 64, 40);
+    c.restore();
+  }
+
+  // ---- shape utils ---------------------------------------------------------
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x+r, y); c.arcTo(x+w, y, x+w, y+h, r);
+    c.arcTo(x+w, y+h, x, y+h, r); c.arcTo(x, y+h, x, y, r);
+    c.arcTo(x, y, x+w, y, r); c.closePath();
+  }
+  function roundRectAt(c, x, y, w, h, r) { roundRect(c, x, y, w, h, r); }
+  function roundRectTop(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x, y+h); c.lineTo(x, y+r); c.arcTo(x, y, x+r, y, r);
+    c.lineTo(x+w-r, y); c.arcTo(x+w, y, x+w, y+r, r);
+    c.lineTo(x+w, y+h); c.closePath();
+  }
+  function mix(a, b, t) {
+    const pa = hex(a), pb = hex(b);
+    return `rgb(${Math.round(lerp(pa[0],pb[0],t))},${Math.round(lerp(pa[1],pb[1],t))},${Math.round(lerp(pa[2],pb[2],t))})`;
+  }
+  function hex(h) { const n = parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+
+  // ---- pixelation blit -----------------------------------------------------
+  function pixelFor(t) {
+    if (t < T.cityA - 0.2) return { size: 1, blur: 0 };
+    if (t < T.virtA - 0.2) {
+      const u = clamp((t - (T.cityA - 0.2)) / ((T.virtA - 0.2) - (T.cityA - 0.2)), 0, 1);
+      return { size: lerp(54, 1, easeInOut(u)), blur: lerp(9, 0, u) };
+    }
+    return { size: 1, blur: 0 };
+  }
+  function blit(pixelSize, blur) {
+    ctx.clearRect(0, 0, W, H);
+    if (pixelSize <= 1.05 && !blur) { ctx.imageSmoothingEnabled = true; ctx.drawImage(off, 0, 0); return; }
+    const sw = Math.max(1, Math.round(W / pixelSize)), sh = Math.max(1, Math.round(H / pixelSize));
+    ttx.imageSmoothingEnabled = true; ttx.clearRect(0, 0, W, H); ttx.drawImage(off, 0, 0, sw, sh);
+    ctx.imageSmoothingEnabled = false;
+    if (blur) ctx.filter = `blur(${blur.toFixed(2)}px)`;
+    ctx.drawImage(tmp, 0, 0, sw, sh, 0, 0, W, H);
+    ctx.filter = 'none';
+  }
+
+  // ---- main loop -----------------------------------------------------------
+  let start = null;
+  function frame(now) {
+    if (start === null) start = now;
+    let t = (now - start) / 1000;
+    if (t > T.end) { start = now; t = 0; CITY = null; } // loop
+
+    // render world to offscreen
+    octx.clearRect(0, 0, W, H);
+    drawBackground(octx, t);
+    drawPrompt(octx, t, win(t, T.promptIn, T.promptHold + 0.8, 0.4, 0.6));
+    drawCity(octx, t, win(t, T.cityA, T.cityB - 0.2, 0.5, 0.6));
+    drawVirtuoso(octx, t, win(t, T.virtA, T.virtB - 0.2, 0.5, 0.6));
+    drawChip(octx, t, win(t, T.chipA, T.chipB + 1.4, 0.5, 0.6));
+    vignette(octx);
+
+    // composite with pixelation
+    const px = pixelFor(t);
+    blit(px.size, px.blur);
+
+    // crisp overlays on top
+    drawWordmark(ctx, win(t, 0.2, T.end, 0.6, 0.4) * 0.9);
+    drawBrand(ctx, t, win(t, T.brandA, T.end, 0.7, 0.4));
+
+    requestAnimationFrame(frame);
+  }
+
+  document.getElementById('replay').addEventListener('click', () => { start = null; CITY = null; });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
