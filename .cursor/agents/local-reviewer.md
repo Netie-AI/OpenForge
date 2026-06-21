@@ -1,7 +1,7 @@
 ---
 name: local-reviewer
 description: Local pre-review gate for evidence quality, risk findings, and concrete follow-up steps.
-model: composer-2.5-fast
+model: inherit
 readonly: true
 is_background: false
 ---
@@ -25,7 +25,7 @@ Review evidence from Cursor execution and return a clear acceptance decision wit
 
 ```markdown
 Protocol: OF-C2C-v1
-Role: Claude reviewer
+Role: Local reviewer (Cursor)
 Intent: review
 Decision: <accept | accept_with_followup | needs_patch | needs_runtime_verification | blocked>
 

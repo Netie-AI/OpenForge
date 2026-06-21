@@ -25,7 +25,7 @@ Use this agent when the task can be split into independent streams.
   - `chief-architect`
   - `semiconductor-eda-engineer`
   - `layout-pex-lead`
-- Add `cursor-executor` only for scoped code edits, on strongest model (`inherit`).
+- Add `cursor-executor` only for scoped code edits, defaulting to `composer-2.5-fast` in composer-mode runs (override only with explicit HANDOFF log reason).
 - Never run multiple writing agents against overlapping files.
 - The coordinator itself stays read-only and does not perform code edits.
 
@@ -37,3 +37,4 @@ Provide:
 - Combined evidence bundle links or excerpts.
 - Explicit `not verified` for missing gates.
 - Final gate outcome from `dv-verifier`.
+- Composer-mode Gate C handoff packet for Claude verification before proceeding.

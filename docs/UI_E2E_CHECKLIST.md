@@ -10,8 +10,8 @@
 
 - [ ] Page loads without console errors (F12 → Console)
 - [ ] Header shows **OpenForge** + **OpenForge L1** badge
-- [ ] **Product type chips** appear (not stuck on “Loading product types…”)
-- [ ] **Applications** section loads (not stuck on “Loading…”)
+- [yes ] **Product type chips** appear (not stuck on “Loading product types…”)
+- [yes ] **Applications** section loads (not stuck on “Loading…”)
 - [ ] **Achievable ranges** section loads
 - [ ] Footer shows PDK + ngspice status + git hash
 
@@ -19,17 +19,17 @@
 
 ## Product selection
 
-- [ ] Click **Op-Amp** (or RS321 product chip) — chip highlights active
-- [ ] Specification textarea fills with sample text
-- [ ] Click a **use-case card** — spec/budget update
+- [yes ] Click **Op-Amp** (or RS321 product chip) — chip highlights active
+- [yes ] Specification textarea fills with sample text
+- [ yes] Click a **use-case card** — spec/budget update
 
 ---
 
 ## Design flow
 
-- [ ] Click **Design Chip** with default op-amp spec
-- [ ] Status line shows progress then “Design complete” (or clear error)
-- [ ] Result pane appears (empty state hidden)
+- [ yes] Click **Design Chip** with default op-amp spec
+- [ yes] Status line shows progress then “Design complete” (or clear error)
+- [ yes] Result pane appears (empty state hidden)
 - [ ] Status banner shows category/topology (not stuck ERROR)
 - [ ] **Metrics** row shows numbers or explicit “not simulated”
 - [ ] **Schematic** tab shows SVG (not blank)

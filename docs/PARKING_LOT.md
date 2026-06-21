@@ -133,6 +133,17 @@ Functional equivalent of “Gym / RL reward”: **`score_design` + `meets_all` +
 | KiCad export polish | Footprint/symbol consistency | low priority |
 | DRC/LVS **prediction** UI | Needs layout layer first | Phase 7+ |
 
+### Explicitly deferred by owner request (2026-06-21)
+
+| Item | Trigger condition |
+|------|-------------------|
+| Body/bulk terminal modeling expansion | Reopen only after all current schematic terminal-attachment gates stay green across opamp/comparator/switch/charge_pump/vref for two consecutive windows |
+| C/Rust rewrite of routing core | Reopen only if Python router fails performance target on documented benchmark netlists (attach profiler + threshold miss evidence) |
+| Draggable schematic editor | Reopen only after static auto-render quality gates are stable and UI E2E checklist passes without schematic regressions |
+| Autosave/editor persistence | Reopen only after draggable editor scope is explicitly opened and accepted by owner |
+| DRC/LVS-in-loop | Reopen only after layout phase is explicitly opened with real layout artifacts (GDS/extraction), not schematic-only SVG |
+| EM / eye-diagram / Q-factor sweeps | Reopen only when high-speed/RF scope is explicitly reopened in `STATUS.md` (currently out-of-scope discipline) |
+
 ---
 
 ## Deferred — UI / product

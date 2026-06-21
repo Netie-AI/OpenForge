@@ -15,6 +15,16 @@ For the full evidence protocol (Gate A/B/C definitions, the Evidence Bundle temp
 4. **Sourcing boundary.** Public datasheets, academic papers, and genuinely open-source EDA tooling (ngspice, Magic, Netgen, OpenROAD, KLayout) are allowed. Cadence or Synopsys source code, internals, or any proprietary/NDA-covered material is forbidden.
 5. **Out of scope until explicitly reopened by Claude/Jian Hong:** PCIe/HBM PHY, SerDes, standard-cells, high-speed IO, full auto-layout, DRC/LVS without layout existing, and any self-triggering/autonomous research loop. Check `docs/PARKING_LOT.md` before assuming work is greenlit.
 
+## Schematic semantic non-negotiables
+
+When any change touches schematic capture/rendering (`openanalog/eda/`, web schematic path, or schematic tests):
+
+1. **Pin semantics over net name shortcuts.** Do not collapse duplicate-pin devices (for example MOS diode ties). Terminal handling must preserve explicit pin identity (`d/g/s`, `p/n`) even when node names are equal.
+2. **Device orientation correctness.** PMOS source-facing side must connect toward VDD rails; NMOS source-facing side must connect toward GND rails unless explicitly documented otherwise.
+3. **Render-path truth.** Verification is only acceptable with the same code path used by browser rendering plus an attached regenerated SVG artifact.
+4. **Geometry guardrail.** No non-axis-aligned signal segments; passive terminal stubs must terminate on their named net.
+5. **No silent evidence downgrade.** If tangling score thresholds are adjusted, attach rationale and pair it with stronger semantic checks; never present threshold loosening as a quality improvement by itself.
+
 ## Subagent reporting requirement
 
 Any subagent invoked in this repo reports using the Evidence Bundle format (Scope / Diff / Verification / Artifacts / Not Verified / Notes) from the `openforge-conventions` skill. If a report is not evidence-shaped, treat it as a failed run.

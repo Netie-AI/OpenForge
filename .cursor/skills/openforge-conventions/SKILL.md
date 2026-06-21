@@ -103,3 +103,17 @@ Decision: <accept | accept_with_followup | needs_patch | needs_runtime_verificat
 ### Notes for Claude
 - <risks/questions>
 ````
+
+## Schematic-specific evidence floor
+
+When a change touches `openanalog/eda/` or schematic rendering:
+
+- Always include a regenerated SVG artifact path from `logs/`.
+- Include verbatim output from:
+  - `pytest tests/test_netlist_schematic.py`
+  - `pytest tests/test_schematic_connectivity.py`
+  - `pytest tests/test_schematic_no_tangling.py`
+- Explicitly state whether terminal semantics were validated for:
+  - passive taps (no floating C/R terminals),
+  - duplicate-pin nets (for example diode-connected MOS drain+gate),
+  - PMOS/NMOS source-side orientation.

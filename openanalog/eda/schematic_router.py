@@ -11,11 +11,12 @@ import heapq
 from dataclasses import dataclass, field
 
 from openanalog.eda.netlist_graph import SpiceDevice
-from openanalog.eda.symbols import Point, snap, symbol_for_device, terminal_positions
+from openanalog.eda.symbols import Point, pin_escape_profile, snap, symbol_for_device, terminal_positions, terminal_refs
 
 STUB_LEN = 10
 _ROUTING_MARGIN = 10
 _BEND_PENALTY = 5
+_TRACK_PITCH = 12
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,7 @@ class TerminalStub:
     node: str
     terminal: Point
     stub_end: Point
+    escape_length: int
     horizontal: bool
     outward_dx: int
     outward_dy: int
@@ -56,27 +58,9 @@ class RouteResult:
     junctions: set[Point] = field(default_factory=set)
 
 
-def _two_term_stub_vectors(sym: object, mirror: bool) -> dict[str, tuple[int, int]]:
-    p = sym.anchors["p"]  # type: ignore[attr-defined]
-    n = sym.anchors["n"]  # type: ignore[attr-defined]
-    if abs(p.y - n.y) > abs(p.x - n.x):
-        return {"p": (0, -STUB_LEN), "n": (0, STUB_LEN)}
-    px = STUB_LEN if mirror else -STUB_LEN
-    nx = -STUB_LEN if mirror else STUB_LEN
-    return {"p": (px, 0), "n": (nx, 0)}
-
-
-def _mos_stub_vector(anchor: str, mirror: bool) -> tuple[int, int]:
-    if anchor == "g":
-        return (STUB_LEN, 0) if mirror else (-STUB_LEN, 0)
-    if anchor == "d":
-        return (0, -STUB_LEN)
-    if anchor == "s":
-        return (0, STUB_LEN)
-    raise ValueError(f"unknown mos anchor {anchor}")
-
-
-def _anchor_name_for_node(dev: SpiceDevice, node: str, *, mirror: bool) -> str:
+def _anchor_name_for_node(dev: SpiceDevice, node: str, *, pin: str | None = None) -> str:
+    if pin:
+        return pin
     if dev.kind == "M":
         idx = dev.nodes.index(node)
         return ("d", "g", "s")[idx]
@@ -90,25 +74,25 @@ def terminal_stub(
     node: str,
     *,
     mirror: bool = False,
+    pin: str | None = None,
+    terminal: Point | None = None,
 ) -> TerminalStub:
-    sym = symbol_for_device(dev)
-    terminal = terminal_positions(dev, origin, mirror=mirror)[node]
-    anchor = _anchor_name_for_node(dev, node, mirror=mirror)
-    if dev.kind == "M":
-        dx, dy = _mos_stub_vector(anchor, mirror)
-    else:
-        vecs = _two_term_stub_vectors(sym, mirror)
-        dx, dy = vecs[anchor]
-    stub_end = Point(terminal.x + dx, terminal.y + dy)
+    term = terminal if terminal is not None else terminal_positions(dev, origin, mirror=mirror)[node]
+    anchor = _anchor_name_for_node(dev, node, pin=pin)
+    escape = pin_escape_profile(dev, anchor, mirror=mirror, escape_length=STUB_LEN)
+    dx = escape.direction[0] * escape.escape_length
+    dy = escape.direction[1] * escape.escape_length
+    stub_end = Point(term.x + dx, term.y + dy)
     horizontal = dy == 0
     return TerminalStub(
         dev_name=dev.name.upper(),
         node=node.lower(),
-        terminal=terminal,
+        terminal=term,
         stub_end=stub_end,
+        escape_length=escape.escape_length,
         horizontal=horizontal,
-        outward_dx=dx // STUB_LEN if dx else 0,
-        outward_dy=dy // STUB_LEN if dy else 0,
+        outward_dx=escape.direction[0],
+        outward_dy=escape.direction[1],
     )
 
 
@@ -187,6 +171,90 @@ def _path_to_segments(path: list[Point], net: str) -> list[RoutedSegment]:
     return segs
 
 
+def _path_len(path: list[Point]) -> int:
+    return sum(_manhattan(path[i], path[i + 1]) for i in range(len(path) - 1))
+
+
+def _path_bends(path: list[Point]) -> int:
+    bends = 0
+    prev_dir: str | None = None
+    for i in range(len(path) - 1):
+        a, b = path[i], path[i + 1]
+        cur_dir = "v" if a.x == b.x else "h"
+        if prev_dir and cur_dir != prev_dir:
+            bends += 1
+        prev_dir = cur_dir
+    return bends
+
+
+def _compress_path(path: list[Point]) -> list[Point]:
+    if not path:
+        return []
+    out: list[Point] = [path[0]]
+    for pt in path[1:]:
+        if pt.x == out[-1].x and pt.y == out[-1].y:
+            continue
+        out.append(pt)
+    if len(out) <= 2:
+        return out
+    compressed: list[Point] = [out[0]]
+    for i in range(1, len(out) - 1):
+        a = compressed[-1]
+        b = out[i]
+        c = out[i + 1]
+        if (a.x == b.x == c.x) or (a.y == b.y == c.y):
+            continue
+        compressed.append(b)
+    compressed.append(out[-1])
+    return compressed
+
+
+def _path_visible(path: list[Point], obstacles: list[Rect]) -> bool:
+    return all(_visible(path[i], path[i + 1], obstacles) for i in range(len(path) - 1))
+
+
+def _fallback_manhattan_path(
+    start: Point,
+    end: Point,
+    nodes: list[Point],
+    obstacles: list[Rect],
+) -> list[Point] | None:
+    """Axis-aligned fallback when visibility-graph routing cannot close a net."""
+    candidates: list[list[Point]] = []
+
+    def add_candidate(path: list[Point]) -> None:
+        path = _compress_path(path)
+        if len(path) >= 2 and _path_visible(path, obstacles):
+            candidates.append(path)
+
+    add_candidate([start, Point(end.x, start.y), end])
+    add_candidate([start, Point(start.x, end.y), end])
+
+    xs = {start.x, end.x, snap((start.x + end.x) // 2)}
+    ys = {start.y, end.y, snap((start.y + end.y) // 2)}
+    for pt in nodes:
+        xs.add(pt.x)
+        ys.add(pt.y)
+    for delta in (10, 20, 30, 40):
+        xs.add(snap(start.x - delta))
+        xs.add(snap(start.x + delta))
+        xs.add(snap(end.x - delta))
+        xs.add(snap(end.x + delta))
+        ys.add(snap(start.y - delta))
+        ys.add(snap(start.y + delta))
+        ys.add(snap(end.y - delta))
+        ys.add(snap(end.y + delta))
+
+    for x in xs:
+        add_candidate([start, Point(x, start.y), Point(x, end.y), end])
+    for y in ys:
+        add_candidate([start, Point(start.x, y), Point(end.x, y), end])
+
+    if candidates:
+        return min(candidates, key=lambda p: (_path_len(p), _path_bends(p)))
+    return None
+
+
 def _shortest_path(
     start: Point,
     end: Point,
@@ -211,16 +279,7 @@ def _shortest_path(
     end_key = (end.x, end.y)
     if end_key not in visible_from.get(start_key, []) and start_key != end_key:
         if not _visible(start, end, obstacles):
-            mid1 = Point(end.x, start.y)
-            mid2 = Point(start.x, end.y)
-            candidates: list[list[Point]] = []
-            if _visible(start, mid1, obstacles) and _visible(mid1, end, obstacles):
-                candidates.append([start, mid1, end])
-            if _visible(start, mid2, obstacles) and _visible(mid2, end, obstacles):
-                candidates.append([start, mid2, end])
-            if not candidates:
-                return None
-            return min(candidates, key=lambda p: sum(_manhattan(p[i], p[i + 1]) for i in range(len(p) - 1)))
+            return _fallback_manhattan_path(start, end, all_pts, obstacles)
 
     # Dijkstra with bend penalty
     dist: dict[tuple[int, int], int] = {start_key: 0}
@@ -252,7 +311,7 @@ def _shortest_path(
                 heapq.heappush(heap, (ncost, nxt.x, nxt.y, out_dir))
 
     if end_key not in dist:
-        return None
+        return _fallback_manhattan_path(start, end, all_pts, obstacles)
 
     path: list[Point] = []
     cur: tuple[int, int] | None = end_key
@@ -260,7 +319,7 @@ def _shortest_path(
         path.append(Point(cur[0], cur[1]))
         cur = prev[cur][0] if cur in prev else None
     path.reverse()
-    return path
+    return _compress_path(path)
 
 
 def _mst_edges(points: list[Point]) -> list[tuple[int, int]]:
@@ -308,12 +367,241 @@ def _merge_collinear(segments: list[RoutedSegment]) -> list[RoutedSegment]:
     return merged
 
 
-def _junction_points(segments: list[RoutedSegment]) -> set[Point]:
-    degree: dict[tuple[int, int], int] = {}
-    for s in segments:
-        for x, y in ((s.x1, s.y1), (s.x2, s.y2)):
-            degree[(x, y)] = degree.get((x, y), 0) + 1
-    return {Point(x, y) for (x, y), d in degree.items() if d >= 3}
+def _is_segment_endpoint(x: int, y: int, seg: RoutedSegment) -> bool:
+    return (x, y) == (seg.x1, seg.y1) or (x, y) == (seg.x2, seg.y2)
+
+
+def _is_segment_interior(x: int, y: int, seg: RoutedSegment) -> bool:
+    if _is_segment_endpoint(x, y, seg):
+        return False
+    if seg.x1 == seg.x2 == x:
+        return min(seg.y1, seg.y2) < y < max(seg.y1, seg.y2)
+    if seg.y1 == seg.y2 == y:
+        return min(seg.x1, seg.x2) < x < max(seg.x1, seg.x2)
+    return False
+
+
+def _routed_collinear_overlap(a: RoutedSegment, b: RoutedSegment) -> bool:
+    if a.net == b.net or a.kind != "wire" or b.kind != "wire":
+        return False
+    if a.y1 == a.y2 == b.y1 == b.y2:
+        lo = max(min(a.x1, a.x2), min(b.x1, b.x2))
+        hi = min(max(a.x1, a.x2), max(b.x1, b.x2))
+        return lo < hi
+    if a.x1 == a.x2 == b.x1 == b.x2:
+        lo = max(min(a.y1, a.y2), min(b.y1, b.y2))
+        hi = min(max(a.y1, a.y2), max(b.y1, b.y2))
+        return lo < hi
+    return False
+
+
+def _path_collinear_conflicts(
+    path: list[Point],
+    net: str,
+    foreign_wires: list[RoutedSegment],
+) -> bool:
+    for seg in _path_to_segments(path, net):
+        for foreign in foreign_wires:
+            if _routed_collinear_overlap(seg, foreign):
+                return True
+    return False
+
+
+def _route_avoid_collinear_foreign(
+    start: Point,
+    end: Point,
+    nodes: list[Point],
+    obstacles: list[Rect],
+    foreign_wires: list[RoutedSegment],
+    net: str,
+) -> list[Point] | None:
+    """Route between stub ends without sharing a track with foreign nets."""
+    candidates: list[list[Point]] = []
+
+    def consider(path: list[Point] | None) -> None:
+        if not path or len(path) < 2:
+            return
+        path = _compress_path(path)
+        if len(path) < 2 or not _path_visible(path, obstacles):
+            return
+        if not _path_collinear_conflicts(path, net, foreign_wires):
+            candidates.append(path)
+
+    consider(_shortest_path(start, end, nodes, obstacles))
+    consider(_fallback_manhattan_path(start, end, nodes, obstacles))
+
+    corner_paths = [
+        [start, Point(end.x, start.y), end],
+        [start, Point(start.x, end.y), end],
+    ]
+    for raw in corner_paths:
+        consider(_compress_path(raw))
+
+    y_refs = {start.y, end.y, snap((start.y + end.y) // 2)}
+    x_refs = {start.x, end.x, snap((start.x + end.x) // 2)}
+    for pt in nodes:
+        y_refs.add(pt.y)
+        x_refs.add(pt.x)
+    for pitch in (_TRACK_PITCH, _TRACK_PITCH * 2, -_TRACK_PITCH, -_TRACK_PITCH * 2, _TRACK_PITCH * 3):
+        y_refs.add(snap(start.y + pitch))
+        y_refs.add(snap(end.y + pitch))
+        x_refs.add(snap(start.x + pitch))
+        x_refs.add(snap(end.x + pitch))
+
+    for y in y_refs:
+        consider(_compress_path([start, Point(start.x, y), Point(end.x, y), end]))
+    for x in x_refs:
+        consider(_compress_path([start, Point(x, start.y), Point(x, end.y), end]))
+
+    if not candidates:
+        return _shortest_path(start, end, nodes, obstacles)
+    return min(candidates, key=lambda p: (_path_len(p), _path_bends(p)))
+
+
+def electrical_junction_points(segments: list[RoutedSegment]) -> set[Point]:
+    """Junction dots: 3+ arms on one net only — never where a foreign net shares the point."""
+    sig = [s for s in segments if s.kind in ("wire", "stub")]
+    if not sig:
+        return set()
+    candidates: set[tuple[int, int]] = set()
+    for seg in sig:
+        candidates.add((seg.x1, seg.y1))
+        candidates.add((seg.x2, seg.y2))
+    junctions: set[Point] = set()
+    for x, y in candidates:
+        nets_at: set[str] = set()
+        degree_by_net: dict[str, int] = {}
+        for seg in sig:
+            if _is_segment_endpoint(x, y, seg):
+                nets_at.add(seg.net)
+                degree_by_net[seg.net] = degree_by_net.get(seg.net, 0) + 1
+            elif _is_segment_interior(x, y, seg):
+                nets_at.add(seg.net)
+                degree_by_net[seg.net] = degree_by_net.get(seg.net, 0) + 2
+        if len(nets_at) != 1:
+            continue
+        sole_net = next(iter(nets_at))
+        if degree_by_net.get(sole_net, 0) >= 3:
+            junctions.add(Point(x, y))
+    return junctions
+
+
+def _repair_collinear_overlaps(segments: list[RoutedSegment]) -> list[RoutedSegment]:
+    """Jog one net off a shared track when two nets collinearly overlap."""
+    out = list(segments)
+    for _ in range(32):
+        repair: tuple[int, list[RoutedSegment]] | None = None
+        for i, a in enumerate(out):
+            if a.kind != "wire":
+                continue
+            for j, b in enumerate(out):
+                if j <= i or b.kind != "wire" or a.net == b.net:
+                    continue
+                if a.y1 == a.y2 == b.y1 == b.y2:
+                    x_lo = max(min(a.x1, a.x2), min(b.x1, b.x2))
+                    x_hi = min(max(a.x1, a.x2), max(b.x1, b.x2))
+                    if x_lo >= x_hi:
+                        continue
+                    victim = a if a.net < b.net else b
+                    vi = i if victim is a else j
+                    y = victim.y1
+                    alt_y = y - _TRACK_PITCH if y - _TRACK_PITCH >= 40 else y + _TRACK_PITCH
+                    jog_x = x_lo - _TRACK_PITCH
+                    if jog_x < 40:
+                        jog_x = x_hi + _TRACK_PITCH
+                    vx_lo, vx_hi = sorted((victim.x1, victim.x2))
+                    pieces: list[RoutedSegment] = []
+                    if vx_lo < jog_x:
+                        pieces.append(RoutedSegment(vx_lo, y, jog_x, y, victim.net))
+                    pieces.append(RoutedSegment(jog_x, y, jog_x, alt_y, victim.net))
+                    pieces.append(RoutedSegment(jog_x, alt_y, x_hi, alt_y, victim.net))
+                    if x_hi < vx_hi:
+                        pieces.append(RoutedSegment(x_hi, alt_y, x_hi, y, victim.net))
+                        pieces.append(RoutedSegment(x_hi, y, vx_hi, y, victim.net))
+                    repair = (vi, pieces)
+                    break
+                if a.x1 == a.x2 == b.x1 == b.x2:
+                    y_lo = max(min(a.y1, a.y2), min(b.y1, b.y2))
+                    y_hi = min(max(a.y1, a.y2), max(b.y1, b.y2))
+                    if y_lo >= y_hi:
+                        continue
+                    victim = a if a.net < b.net else b
+                    vi = i if victim is a else j
+                    x = victim.x1
+                    alt_x = x - _TRACK_PITCH if x - _TRACK_PITCH >= 40 else x + _TRACK_PITCH
+                    vy_lo, vy_hi = sorted((victim.y1, victim.y2))
+                    pieces = []
+                    if vy_lo < y_lo:
+                        pieces.append(RoutedSegment(x, vy_lo, x, y_lo, victim.net))
+                    pieces.append(RoutedSegment(x, y_lo, alt_x, y_lo, victim.net))
+                    pieces.append(RoutedSegment(alt_x, y_lo, alt_x, y_hi, victim.net))
+                    if y_hi < vy_hi:
+                        pieces.append(RoutedSegment(alt_x, y_hi, x, y_hi, victim.net))
+                        pieces.append(RoutedSegment(x, y_hi, x, vy_hi, victim.net))
+                    repair = (vi, pieces)
+                    break
+            if repair:
+                break
+        if repair is None:
+            break
+        vi, pieces = repair
+        out.pop(vi)
+        out[vi:vi] = pieces
+    return out
+
+
+def _trim_redundant_vertical_spurs(segments: list[RoutedSegment]) -> list[RoutedSegment]:
+    """Drop vertical legs past a same-net horizontal jog when the far end is a degree-1 spur."""
+    from collections import defaultdict
+
+    by_net: dict[str, list[RoutedSegment]] = defaultdict(list)
+    for seg in segments:
+        by_net[seg.net].append(seg)
+
+    def endpoint_degree(net_segs: list[RoutedSegment], px: int, py: int) -> int:
+        degree = 0
+        for s in net_segs:
+            if (s.x1, s.y1) == (px, py):
+                degree += 1
+            if (s.x2, s.y2) == (px, py):
+                degree += 1
+        return degree
+
+    trimmed: list[RoutedSegment] = []
+    for seg in segments:
+        if seg.kind != "wire" or seg.x1 != seg.x2:
+            trimmed.append(seg)
+            continue
+        x = seg.x1
+        net_segs = by_net[seg.net]
+        horiz_y_at_x = set()
+        for other in net_segs:
+            if other.y1 != other.y2:
+                continue
+            if other.x1 == x:
+                horiz_y_at_x.add(other.y1)
+            if other.x2 == x:
+                horiz_y_at_x.add(other.y2)
+        end_a = (x, seg.y1)
+        end_b = (x, seg.y2)
+        deg_a = endpoint_degree(net_segs, *end_a)
+        deg_b = endpoint_degree(net_segs, *end_b)
+        if (deg_a, deg_b) != (1, 2) and (deg_a, deg_b) != (2, 1):
+            trimmed.append(seg)
+            continue
+        spur = end_a if deg_a == 1 else end_b
+        anchor = end_b if deg_a == 1 else end_a
+        y_lo, y_hi = sorted((seg.y1, seg.y2))
+        trim_candidates = [y for y in horiz_y_at_x if y_lo < y < y_hi]
+        if not trim_candidates:
+            trimmed.append(seg)
+            continue
+        ty = min(trim_candidates, key=lambda y: abs(y - spur[1]))
+        if spur[1] > anchor[1]:
+            trimmed.append(RoutedSegment(x, ty, x, anchor[1], seg.net))
+        else:
+            trimmed.append(RoutedSegment(x, anchor[1], x, ty, seg.net))
+    return trimmed
 
 
 def _is_passive_bridge(dev: SpiceDevice) -> bool:
@@ -382,6 +670,89 @@ def _tap_passive_stubs(
         segments_out.extend(_orthogonal_tap_segments(stub.stub_end, best_tap, net_name))
 
 
+def _wire_obstacles(
+    segments: list[RoutedSegment],
+    *,
+    margin: int = 4,
+) -> list[Rect]:
+    """Reserve existing routed tracks so later nets avoid overlapping them."""
+    def segment_rect(x1: int, y1: int, x2: int, y2: int, pad: int) -> Rect | None:
+        if x1 == x2:
+            x = x1
+            y0, y1s = sorted((y1, y2))
+            return Rect(x - pad, y0 - 1, x + pad, y1s + 1)
+        if y1 == y2:
+            y = y1
+            x0, x1s = sorted((x1, x2))
+            return Rect(x0 - 1, y - pad, x1s + 1, y + pad)
+        return None
+
+    rects: list[Rect] = []
+    for seg in segments:
+        if seg.kind != "wire":
+            continue
+        rect = segment_rect(seg.x1, seg.y1, seg.x2, seg.y2, margin)
+        if rect:
+            rects.append(rect)
+    return rects
+
+
+def _foreign_escape_obstacles(
+    net_stubs: dict[str, list[TerminalStub]],
+    net_name: str,
+    exempt_points: set[tuple[int, int]],
+    *,
+    margin: int = 3,
+) -> list[Rect]:
+    """Protect other nets' terminal escape corridors and endpoints."""
+    def segment_rect(x1: int, y1: int, x2: int, y2: int, pad: int) -> Rect | None:
+        if x1 == x2:
+            x = x1
+            y0, y1s = sorted((y1, y2))
+            return Rect(x - pad, y0 - 1, x + pad, y1s + 1)
+        if y1 == y2:
+            y = y1
+            x0, x1s = sorted((x1, x2))
+            return Rect(x0 - 1, y - pad, x1s + 1, y + pad)
+        return None
+
+    rects: list[Rect] = []
+    seen_rects: set[tuple[int, int, int, int]] = set()
+    for other_net, stubs in net_stubs.items():
+        if other_net == net_name:
+            continue
+        for stub in stubs:
+            corridor = segment_rect(
+                stub.terminal.x,
+                stub.terminal.y,
+                stub.stub_end.x,
+                stub.stub_end.y,
+                margin,
+            )
+            if corridor:
+                if any(corridor.contains_interior(x, y) for x, y in exempt_points):
+                    corridor = None
+            if corridor:
+                key = (corridor.x0, corridor.y0, corridor.x1, corridor.y1)
+                if key not in seen_rects:
+                    seen_rects.add(key)
+                    rects.append(corridor)
+            endpoint = Rect(
+                stub.stub_end.x - margin,
+                stub.stub_end.y - margin,
+                stub.stub_end.x + margin,
+                stub.stub_end.y + margin,
+            )
+            if any(endpoint.contains_interior(x, y) for x, y in exempt_points):
+                continue
+            ekey = (endpoint.x0, endpoint.y0, endpoint.x1, endpoint.y1)
+            if ekey in seen_rects:
+                continue
+            seen_rects.add(ekey)
+            rects.append(endpoint)
+    return rects
+
+
 def route_nets(
     placed: list,
     *,
@@ -394,21 +765,26 @@ def route_nets(
 
     net_stubs: dict[str, list[TerminalStub]] = {}
     for pd in placed:
-        for node in pd.dev.nodes:
+        for node, pin, terminal in terminal_refs(pd.dev, pd.origin, mirror=pd.mirror):
             if node == "0" or node.lower() in rails:
                 continue
-            stub = terminal_stub(pd.dev, pd.origin, node, mirror=pd.mirror)
+            stub = terminal_stub(pd.dev, pd.origin, node, mirror=pd.mirror, pin=pin, terminal=terminal)
             net_stubs.setdefault(node.lower(), []).append(stub)
 
     all_segments: list[RoutedSegment] = []
-    all_junctions: set[Point] = set()
 
-    graph_nodes = _collect_graph_nodes(
-        [s for stubs in net_stubs.values() for s in stubs],
-        obstacles,
-    )
+    all_stub_points = [s for stubs in net_stubs.values() for s in stubs]
 
     for net_name, stubs in net_stubs.items():
+        reserved = _wire_obstacles([s for s in all_segments if s.net != net_name])
+        exempt_points = {
+            (stub.terminal.x, stub.terminal.y) for stub in stubs
+        } | {
+            (stub.stub_end.x, stub.stub_end.y) for stub in stubs
+        }
+        foreign_stub_guards = _foreign_escape_obstacles(net_stubs, net_name, exempt_points)
+        active_obstacles = obstacles + reserved + foreign_stub_guards
+        graph_nodes = _collect_graph_nodes(all_stub_points, active_obstacles)
         active_stubs = [s for s in stubs if s.dev_name not in passive_names]
         passive_stubs = [s for s in stubs if s.dev_name in passive_names]
         route_stubs = active_stubs if active_stubs else stubs
@@ -448,35 +824,140 @@ def route_nets(
                 seen.add(k)
                 unique_ends.append(p)
 
+        foreign_wires = [s for s in all_segments if s.net != net_name and s.kind == "wire"]
+
         if len(unique_ends) >= 2:
             for i, j in _mst_edges(unique_ends):
-                path = _shortest_path(unique_ends[i], unique_ends[j], graph_nodes, obstacles)
+                path = _route_avoid_collinear_foreign(
+                    unique_ends[i],
+                    unique_ends[j],
+                    graph_nodes,
+                    active_obstacles,
+                    foreign_wires,
+                    net_name,
+                )
                 if path is None:
-                    mid = Point(
-                        snap((unique_ends[i].x + unique_ends[j].x) // 2),
-                        snap((unique_ends[i].y + unique_ends[j].y) // 2),
-                    )
-                    path = [unique_ends[i], mid, unique_ends[j]]
+                    path = _fallback_manhattan_path(unique_ends[i], unique_ends[j], graph_nodes, active_obstacles) or [
+                        unique_ends[i],
+                        Point(unique_ends[j].x, unique_ends[i].y),
+                        unique_ends[j],
+                    ]
                 all_segments.extend(_path_to_segments(path, net_name))
+                foreign_wires = [s for s in all_segments if s.net != net_name and s.kind == "wire"]
 
         net_segs = [s for s in all_segments if s.net == net_name and s.kind == "wire"]
         _tap_passive_stubs(passive_stubs, net_name, net_segs, all_segments)
-        net_segs = [s for s in all_segments if s.net == net_name and s.kind == "wire"]
-        if len(route_stubs) >= 3:
-            all_junctions |= _junction_points(net_segs)
 
     all_segments = _merge_collinear(all_segments)
+    all_segments = _repair_collinear_overlaps(all_segments)
+    all_segments = _merge_collinear(all_segments)
+    all_segments = _trim_redundant_vertical_spurs(all_segments)
+    all_segments = _merge_collinear(all_segments)
+    all_junctions = electrical_junction_points(all_segments)
     return RouteResult(segments=all_segments, junctions=all_junctions)
 
 
-def segments_to_svg_lines(segments: list[RoutedSegment], wire_class: str, rail_class: str) -> str:
+_HOP_RADIUS = 4
+
+
+def _segment_svg_class(seg: RoutedSegment, wire_class: str, rail_class: str) -> str:
+    if seg.kind == "rail":
+        return rail_class
+    if seg.kind == "stub":
+        return wire_class.replace('signal-wire"', 'signal-wire terminal-stub"')
+    return wire_class
+
+
+def _append_svg_class(cls: str, extra: str) -> str:
+    marker = 'class="'
+    start = cls.index(marker) + len(marker)
+    end = cls.index('"', start)
+    return cls[:start] + cls[start:end] + f" {extra}" + cls[end:]
+
+
+def _hop_points_by_segment(
+    segments: list[RoutedSegment],
+    junctions: set[Point],
+) -> dict[int, list[tuple[int, int]]]:
+    """Map segment index -> crossing centers where that segment should draw a hop."""
+    from openanalog.eda.schematic_geometry import Segment, segments_intersect
+
+    junction_set = {(j.x, j.y) for j in junctions}
+    hops: dict[int, list[tuple[int, int]]] = {}
+    geom = [Segment(s.x1, s.y1, s.x2, s.y2, s.net, s.kind) for s in segments]
+
+    for i, seg_a in enumerate(segments):
+        for j in range(i + 1, len(segments)):
+            seg_b = segments[j]
+            if seg_a.net == seg_b.net:
+                continue
+            if seg_a.kind == "rail" and seg_b.kind == "rail":
+                continue
+            pt = segments_intersect(geom[i], geom[j])
+            if pt is None:
+                continue
+            cross = (round(pt[0]), round(pt[1]))
+            if cross in junction_set:
+                continue
+            hop_idx = i if seg_a.net > seg_b.net else j
+            hops.setdefault(hop_idx, []).append(cross)
+    return hops
+
+
+def _render_segment_with_hops(
+    seg: RoutedSegment,
+    crossings: list[tuple[int, int]],
+    wire_class: str,
+    rail_class: str,
+) -> list[str]:
+    cls = _segment_svg_class(seg, wire_class, rail_class)
+    hop_cls = _append_svg_class(cls, "wire-hop")
+    if not crossings:
+        return [f'<line x1="{seg.x1}" y1="{seg.y1}" x2="{seg.x2}" y2="{seg.y2}" {cls}/>']
+
+    r = _HOP_RADIUS
+    parts: list[str] = []
+    if seg.y1 == seg.y2:
+        y = seg.y1
+        x_lo, x_hi = sorted((seg.x1, seg.x2))
+        xs = sorted({cx for cx, cy in crossings if x_lo < cx < x_hi and cy == y})
+        cursor = x_lo
+        for cx in xs:
+            if cx - r > cursor:
+                parts.append(f'<line x1="{cursor}" y1="{y}" x2="{cx - r}" y2="{y}" {cls}/>')
+            parts.append(f'<path d="M {cx - r} {y} A {r} {r} 0 0 1 {cx + r} {y}" {hop_cls}/>')
+            cursor = cx + r
+        if cursor < x_hi:
+            parts.append(f'<line x1="{cursor}" y1="{y}" x2="{x_hi}" y2="{y}" {cls}/>')
+        return parts
+
+    if seg.x1 == seg.x2:
+        x = seg.x1
+        y_lo, y_hi = sorted((seg.y1, seg.y2))
+        ys = sorted({cy for cx, cy in crossings if y_lo < cy < y_hi and cx == x})
+        cursor = y_lo
+        for cy in ys:
+            if cy - r > cursor:
+                parts.append(f'<line x1="{x}" y1="{cursor}" x2="{x}" y2="{cy - r}" {cls}/>')
+            parts.append(f'<path d="M {x} {cy - r} A {r} {r} 0 0 1 {x} {cy + r}" {hop_cls}/>')
+            cursor = cy + r
+        if cursor < y_hi:
+            parts.append(f'<line x1="{x}" y1="{cursor}" x2="{x}" y2="{y_hi}" {cls}/>')
+        return parts
+
+    return [f'<line x1="{seg.x1}" y1="{seg.y1}" x2="{seg.x2}" y2="{seg.y2}" {cls}/>']
+
+
+def segments_to_svg_lines(
+    segments: list[RoutedSegment],
+    wire_class: str,
+    rail_class: str,
+    *,
+    junctions: set[Point] | None = None,
+) -> str:
+    """Emit SVG line/path elements; unrelated-net crossings get wire-hop arcs."""
+    hop_map = _hop_points_by_segment(segments, junctions or set())
     lines: list[str] = []
-    for s in segments:
-        if s.kind == "rail":
-            cls = rail_class
-        elif s.kind == "stub":
-            cls = f'{wire_class} terminal-stub'
-        else:
-            cls = wire_class
-        lines.append(f'<line x1="{s.x1}" y1="{s.y1}" x2="{s.x2}" y2="{s.y2}" {cls}/>')
+    for idx, seg in enumerate(segments):
+        lines.extend(_render_segment_with_hops(seg, hop_map.get(idx, []), wire_class, rail_class))
     return ("\n".join(lines) + "\n") if lines else ""

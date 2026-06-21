@@ -320,4 +320,34 @@ CMRR bench is measurable and normalization-corrected — **Option B parked** (be
 
 **Artifacts:** `docs/HANDOFF.md` § Review tone; `.cursor/rules/claude-cursor-response-contract.mdc` + `.rules/claude-cursor-response-contract.md` — new Cursor section **Why / thought process**; `.cursor/skills/mode-routing/SKILL.md` Required outputs updated.
 
+**Dual contract files (intentional):** `.cursor/rules/claude-cursor-response-contract.mdc` is the Cursor IDE rule (always-applied workspace rule). `.rules/claude-cursor-response-contract.md` is a plain-markdown mirror for tools/agents that read `.rules/` but not `.cursor/rules/`. Keep both in sync when the OF-C2C template changes; edit one without the other only if the target tool reads a single path.
+
 **Not verified:** Composer-mode Claude windows automatically adopt tone without human paste-in of updated HANDOFF blocks.
+
+---
+
+## Entry 8 — PSRR envelope calibration (single-category, 2026-06-20)
+
+**Status:** calibration complete — **do not** add `psrr>85dB` to `DEV_MODE_SPECS` yet (0/4 seeds pass; W3 range cap).
+
+**Question:** Before PVT envelope expansion, can RS321 PSRR close via sizing if added to the fitness gate?
+
+**Method:** `scripts/diag_opamp_psrr_envelope_cal.py` — base `DEV_MODE_SPECS["opamp"]` vs same + `psrr>85dB`; seeds 42/1/7/99 @ budget=250; manual W3=150 outside sizer range.
+
+### Results (bundled L1, dv-verifier exact match)
+
+| Case | seed=42 | seed=99 (best PSRR) | meets_all |
+|------|---------|---------------------|-----------|
+| baseline (no PSRR in spec) | psrr=54.7, **pass** | psrr=78.2, fail (AOL) | 3/4 |
+| +psrr>85dB | psrr=57.7, fail | psrr=81.1 @ W3=60 µm cap, fail | **0/4** |
+| manual W3=150 µm | — | psrr=**83.1** dB | n/a (not sized) |
+
+**Interpretation:** W3 remains causal (seed=99 pins W3=60 → 81.1 dB). Sizer `W3` range **1–60 µm** blocks reaching manual-sweep ceiling (~83 dB @ W3=150). RS321 typ **85 dB** is **~2 dB above** even the manual W3=150 point on bundled L1 — envelope gate at 85 dB would need W3 range extension **and** may still miss on bundled models (BSIM follow-up deferred).
+
+**Decision:** PVT backlog scales with **bench-only PSRR** for now. Full envelope add requires owner decision: extend W3 range, relax PSRR target (~80 dB typ alignment), or honest partial (like CMRR Option B).
+
+### Evidence
+
+- `scripts/diag_opamp_psrr_envelope_cal.py`
+- `openanalog/interface/datasheet.py` — opamp `psrr_dB` inline parse (calibration harness only; `DEV_MODE_SPECS` unchanged)
+- `scripts/verify_psrr.py` — still exit 0

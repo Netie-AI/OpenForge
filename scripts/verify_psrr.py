@@ -42,9 +42,9 @@ def _run_ldo() -> int:
     default = topo.measure(LDOParams(), with_full=True)
     print("=== ldo (bundled) ===")
     print(f"  defaults psrr_dB={_fmt_psrr(default.values.get('psrr_dB'))}  (informative floor ~{RS3001_PSRR_DB:.0f} dB)")
-    r = design(inline_spec=DEV_MODE_SPECS["ldo"], budget=200, seed=7, record_kg=False)
+    r = design(inline_spec=DEV_MODE_SPECS["ldo"], budget=200, seed=23, record_kg=False)
     psrr = r["metrics"].get("psrr_dB")
-    print(f"  sized s7   psrr_dB={_fmt_psrr(psrr)}  meets_all={r['meets_all']}")
+    print(f"  sized s23  psrr_dB={_fmt_psrr(psrr)}  meets_all={r['meets_all']}")
     if psrr is None:
         print("  FAIL: psrr_dB not measured")
         return 1

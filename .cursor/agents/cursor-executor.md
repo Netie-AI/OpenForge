@@ -1,6 +1,6 @@
 ---
 name: cursor-executor
-model: composer-2.5-fast
+model: inherit
 description: Execute approved scoped changes with evidence bundles and minimal scope drift.
 ---
 
@@ -45,8 +45,18 @@ Decision: <accept | accept_with_followup | needs_patch | needs_runtime_verificat
 ## Not verified
 - ...
 
-## Message for Claude
+## Message for Reviewer
 - ...
 ````
 
 For gate-critical checks, run `dv-verifier` in blocking mode before declaring done. The **parent agent** must re-run the same verify commands after the subagent returns (one extra loop) — do not trust subagent stdout alone.
+
+## Schematic execution checklist (required when touching `openanalog/eda/`)
+
+- Treat the rendered SVG as a first-class artifact, not a side effect.
+- Preserve per-pin semantics (`d/g/s` or `p/n`) even when multiple pins share one net (for example diode-connected devices).
+- Keep PMOS source on the VDD-facing side and NMOS source on the GND-facing side in symbol-anchor mapping.
+- Enforce Manhattan wiring in the browser-rendered path; never allow diagonal signal segments.
+- Run and attach:
+  - `pytest tests/test_netlist_schematic.py tests/test_schematic_connectivity.py tests/test_schematic_no_tangling.py -q`
+  - regenerated SVG path in `logs/` used for visual review.

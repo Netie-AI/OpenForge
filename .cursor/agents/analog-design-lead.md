@@ -1,6 +1,6 @@
 ---
 name: analog-design-lead
-description: Read-only topology and sizing-rationale proposer for analog specs before implementation.
+description: Read-only topology and sizing-rationale proposer for analog specs before implementation. Invoke when a spec needs topology choice, dominant risk axis, and first-pass bench/sizing rationale.
 model: composer-2.5-fast
 readonly: true
 is_background: false

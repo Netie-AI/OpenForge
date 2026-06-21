@@ -152,12 +152,12 @@ def api_meta() -> dict[str, Any]:
         "model_set_label": "OpenForge L1 (bundled level-1 MOSFET models)",
         "achievable_ranges": achievable_ranges_payload(),
         **use_cases_payload(),
+        **presets_payload(),
         "version": {
             "git_hash": _git_short_hash(),
             "build_date": _build_date(),
             "pdk_mode": MODEL_SET,
         },
-        **presets_payload(),
     }
 
 

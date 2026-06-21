@@ -1,6 +1,6 @@
 ---
 name: layout-pex-lead
-description: Read-only physical-layout and parasitic-risk advisor for future-staged phase work.
+description: Read-only physical-layout and parasitic-risk advisor for future-staged phase work. Invoke when matching/layout/PEX risk is discussed while Phase 7+ remains gated.
 model: composer-2.5-fast
 readonly: true
 is_background: false

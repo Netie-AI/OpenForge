@@ -69,18 +69,42 @@ def _overlap_1d(a: tuple[int, int], b: tuple[int, int]) -> tuple[float, float] |
     return (lo, hi) if lo <= hi else None
 
 
-def segments_intersect(a: Segment, b: Segment) -> tuple[float, float] | None:
-    if a.is_horizontal and b.is_horizontal:
-        if a.y1 != b.y1:
-            return None
+def collinear_overlap(a: Segment, b: Segment) -> tuple[int, int, int, int] | None:
+    """Return (axis, coord, lo, hi) for shared-track overlap between different nets."""
+    if a.net == b.net:
+        return None
+    if a.is_horizontal and b.is_horizontal and a.y1 == b.y1:
         ov = _overlap_1d(a.x_range, b.x_range)
-        return None if ov is None else ((ov[0] + ov[1]) / 2, a.y1)
-
-    if a.is_vertical and b.is_vertical:
-        if a.x1 != b.x1:
+        if ov is None or ov[0] >= ov[1]:
             return None
+        return (0, a.y1, int(ov[0]), int(ov[1]))
+    if a.is_vertical and b.is_vertical and a.x1 == b.x1:
         ov = _overlap_1d(a.y_range, b.y_range)
-        return None if ov is None else (a.x1, (ov[0] + ov[1]) / 2)
+        if ov is None or ov[0] >= ov[1]:
+            return None
+        return (1, a.x1, int(ov[0]), int(ov[1]))
+    return None
+
+
+def find_collinear_overlaps(segments: list[Segment]) -> list[tuple[Segment, Segment, tuple[int, int, int, int]]]:
+    """Pairs of unrelated-net segments sharing a collinear track span."""
+    overlaps: list[tuple[Segment, Segment, tuple[int, int, int, int]]] = []
+    for i, a in enumerate(segments):
+        if a.kind not in ("wire", "stub"):
+            continue
+        for b in segments[i + 1 :]:
+            if b.kind not in ("wire", "stub"):
+                continue
+            hit = collinear_overlap(a, b)
+            if hit is not None:
+                overlaps.append((a, b, hit))
+    return overlaps
+
+
+def segments_intersect(a: Segment, b: Segment) -> tuple[float, float] | None:
+    # Collinear track sharing is a routing bug, not a perpendicular crossing.
+    if (a.is_horizontal and b.is_horizontal) or (a.is_vertical and b.is_vertical):
+        return None
 
     h, v = (a, b) if a.is_horizontal else (b, a)
     hx0, hx1 = h.x_range

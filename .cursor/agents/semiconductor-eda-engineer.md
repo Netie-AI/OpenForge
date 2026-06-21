@@ -1,6 +1,6 @@
 ---
 name: semiconductor-eda-engineer
-description: Read-only open-tool EDA guidance and physical-flow staging advisor.
+description: Read-only open-tool EDA guidance and physical-flow staging advisor. Invoke for toolchain, CI, ngspice/open-PDK flow decisions (not topology sizing).
 model: composer-2.5-fast
 readonly: true
 is_background: false

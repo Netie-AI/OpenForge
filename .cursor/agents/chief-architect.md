@@ -1,6 +1,6 @@
 ---
 name: chief-architect
-description: Read-only strategy and scope-governance advisor aligned to phase gates.
+description: Read-only strategy and scope-governance advisor aligned to phase gates. Invoke before scope expansion, phase jumps, or roadmap-level reprioritization.
 model: composer-2.5-fast
 readonly: true
 is_background: false

@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import pytest
 
+from openanalog.forge.spec_envelopes import DEV_MODE_SPECS
 from openanalog.eda.netlist_graph import parse_spice_devices
 from openanalog.eda.schematic_connectivity import (
     anchor_wire_diffs,
+    collinear_net_overlap_errors,
+    false_junction_dot_errors,
+    hop_centers,
     parse_wire_segments,
+    required_hop_centers,
+    required_junction_points,
     terminal_map,
     verify_schematic_connectivity,
     verify_terminal_stubs,
+    junction_points,
 )
+from openanalog.eda.schematic_router import route_nets
 from openanalog.eda.schematic_layout import build_schematic_layout, render_schematic_svg
 from openanalog.eda.symbols import terminal_positions
 from openanalog.interface.designer import design
@@ -22,6 +30,14 @@ _FLOORPLANS = (
         "diff_pair_comparator",
         dict(category="comparator", inline_spec="tp<1us vos<5mV iq<10uA", budget=40, use_llm=False),
     ),
+)
+
+_ALL_ATTACHMENT_CASES = (
+    ("opamp", dict(text="RS722 high precision low offset op-amp", budget=40, use_llm=False)),
+    ("comparator", dict(category="comparator", inline_spec=DEV_MODE_SPECS["comparator"], budget=40, use_llm=False)),
+    ("switch", dict(category="switch", inline_spec=DEV_MODE_SPECS["switch"], budget=40, use_llm=False)),
+    ("charge_pump", dict(category="charge_pump", inline_spec=DEV_MODE_SPECS["charge_pump"], budget=40, use_llm=False)),
+    ("vref", dict(category="vref", inline_spec="vref=1.2V line_reg<5mV tempco<100ppm iq<200uA", budget=40, use_llm=False)),
 )
 
 
@@ -37,6 +53,14 @@ def floorplan_case(request):
 
 def test_terminal_to_wire_match(floorplan_case):
     name, result, devices = floorplan_case
+    diffs = anchor_wire_diffs(devices, result)
+    assert not diffs, f"{name} terminal/wire mismatches:\n" + "\n".join(diffs)
+
+
+@pytest.mark.parametrize("name,kwargs", _ALL_ATTACHMENT_CASES, ids=[c[0] for c in _ALL_ATTACHMENT_CASES])
+def test_all_device_terminals_attached(name: str, kwargs: dict):
+    result = design(**kwargs)
+    devices = parse_spice_devices(result["netlist"])
     diffs = anchor_wire_diffs(devices, result)
     assert not diffs, f"{name} terminal/wire mismatches:\n" + "\n".join(diffs)
 
@@ -100,7 +124,10 @@ def test_netlist_pins_match_terminal_map(floorplan_case):
             pts = [
                 pt
                 for pt, pins in tmap.items()
-                if (dev.name.upper(), node.lower()) in pins
+                if any(
+                    pin_name.startswith(f"{dev.name.upper()}.") and pin_node == node.lower()
+                    for pin_name, pin_node in pins
+                )
             ]
             assert pts, f"{name}: {dev.name}.{node} has no placed terminal"
 
@@ -123,3 +150,111 @@ def test_terminal_stub_check_fails_on_legacy_router(floorplan_case):
     legacy_svg = svg.replace(" terminal-stub", "")
     errors = verify_terminal_stubs(layout.placed, legacy_svg)
     assert errors, f"{name}: legacy router should fail stub check (got 0 errors)"
+
+
+@pytest.mark.parametrize("name,kwargs", _ALL_ATTACHMENT_CASES, ids=[c[0] for c in _ALL_ATTACHMENT_CASES])
+def test_multiterminal_nets_have_junction_dot(name: str, kwargs: dict):
+    """Every 3+ arm electrical node (incl. interior taps) must render a junction dot."""
+    result = design(**kwargs)
+    devices = parse_spice_devices(result["netlist"])
+    svg = render_schematic_svg(devices, result)
+    required = required_junction_points(devices, result)
+    drawn = junction_points(svg)
+    missing = required - drawn
+    assert not missing, f"{name} missing junction dots at {sorted(missing)}"
+
+
+@pytest.mark.parametrize("name,kwargs", _ALL_ATTACHMENT_CASES, ids=[c[0] for c in _ALL_ATTACHMENT_CASES])
+def test_unconnected_crossings_have_hop(name: str, kwargs: dict):
+    """Unrelated-net crossings must show a wire-hop arc, not a flat line-over-line."""
+    result = design(**kwargs)
+    devices = parse_spice_devices(result["netlist"])
+    svg = render_schematic_svg(devices, result)
+    required = required_hop_centers(devices, result)
+    drawn = hop_centers(svg)
+    missing = required - drawn
+    assert not missing, f"{name} missing wire hops at {sorted(missing)}"
+
+
+@pytest.mark.parametrize("name,kwargs", _ALL_ATTACHMENT_CASES, ids=[c[0] for c in _ALL_ATTACHMENT_CASES])
+def test_no_collinear_net_track_overlap(name: str, kwargs: dict):
+    """Distinct nets must not share a collinear wire track (false short)."""
+    result = design(**kwargs)
+    devices = parse_spice_devices(result["netlist"])
+    errors = collinear_net_overlap_errors(devices, result)
+    assert not errors, f"{name} collinear track overlaps:\n" + "\n".join(errors)
+
+
+@pytest.mark.parametrize("name,kwargs", _ALL_ATTACHMENT_CASES, ids=[c[0] for c in _ALL_ATTACHMENT_CASES])
+def test_junction_dots_not_on_foreign_nets(name: str, kwargs: dict):
+    """Junction dots must belong to one net only — no false-short notation."""
+    result = design(**kwargs)
+    devices = parse_spice_devices(result["netlist"])
+    errors = false_junction_dot_errors(devices, result)
+    assert not errors, f"{name} false junction dots:\n" + "\n".join(errors)
+
+
+def test_opamp_n1_does_not_share_nout1_track_at_344_168() -> None:
+    """Regression: n1 mirror bus must not collinearly overlap nout1 at (344,168)."""
+    from openanalog.eda.schematic_router import _is_segment_endpoint, _is_segment_interior
+
+    result = design(text="RS722 high precision low offset op-amp", budget=40, use_llm=False)
+    devices = parse_spice_devices(result["netlist"])
+    layout = build_schematic_layout(devices, result)
+    routed = route_nets(layout.placed)
+    n1 = [s for s in routed.segments if s.net == "n1"]
+    assert not any(
+        _is_segment_interior(344, 168, s)
+        or _is_segment_endpoint(344, 168, s)
+        for s in n1
+    ), "n1 must not pass through nout1 tap column at y=168"
+    overlaps = collinear_net_overlap_errors(devices, result)
+    assert not any("n1" in e and "nout1" in e for e in overlaps), overlaps
+
+
+def test_opamp_m8_gnd_does_not_share_nb_column_at_192() -> None:
+    """Regression: M8 source GND riser must not collinearly overlap nb bias trunk at x=192."""
+    from openanalog.eda.schematic_layout import all_rail_riser_segments
+    from openanalog.eda.schematic_geometry import Segment, find_collinear_overlaps
+
+    result = design(text="RS722 high precision low offset op-amp", budget=40, use_llm=False)
+    devices = parse_spice_devices(result["netlist"])
+    overlaps = collinear_net_overlap_errors(devices, result)
+    assert not any("x=192" in e and "nb" in e and "0" in e for e in overlaps), overlaps
+    layout = build_schematic_layout(devices, result)
+    routed = route_nets(layout.placed)
+    from openanalog.eda.schematic_connectivity import _collect_net_points
+
+    nets = _collect_net_points(layout.placed)
+    gnd = all_rail_riser_segments(layout.placed, nets, layout.height, routed.segments)
+    gnd_at_192 = [s for s in gnd if s.net == "0" and s.x1 == s.x2 == 192]
+    assert not gnd_at_192, f"M8 GND riser must not use x=192 when nb occupies that column: {gnd_at_192}"
+    signal = [
+        Segment(s.x1, s.y1, s.x2, s.y2, s.net, s.kind)
+        for s in routed.segments
+        if s.kind == "wire"
+    ]
+    m8_overlap = [
+        (a, b, hit)
+        for a, b, hit in find_collinear_overlaps(signal + gnd)
+        if hit[0] == 1 and hit[1] == 192 and {"nb", "0"} <= {a.net, b.net}
+    ]
+    assert not m8_overlap, m8_overlap
+
+
+def test_opamp_n1_m4_gate_riser_trimmed_at_380() -> None:
+    """Regression: n1 M4-gate riser should connect jog at y=156, not hang through y=168."""
+    from openanalog.eda.schematic_router import _is_segment_interior
+
+    result = design(text="RS722 high precision low offset op-amp", budget=40, use_llm=False)
+    devices = parse_spice_devices(result["netlist"])
+    layout = build_schematic_layout(devices, result)
+    routed = route_nets(layout.placed)
+    n1_vert = [s for s in routed.segments if s.net == "n1" and s.x1 == s.x2 == 380]
+    assert len(n1_vert) == 1, n1_vert
+    seg = n1_vert[0]
+    assert max(seg.y1, seg.y2) == 156, f"expected top at jog y=156, got {seg}"
+    assert min(seg.y1, seg.y2) == 144
+    assert not _is_segment_interior(380, 168, seg)
+    svg = render_schematic_svg(devices, result)
+    assert (380, 156) not in hop_centers(svg)
