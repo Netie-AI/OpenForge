@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 460" width="520" height="460">
+<style>
+  .signal-wire{stroke:#5ad1c9;stroke-width:1.5;fill:none}
+  .signal-wire.rail{stroke-width:2}
+  .dim{font:9px ui-monospace,monospace}
+  .title{font:bold 13px sans-serif}
+  .rail-label{font:bold 11px sans-serif}
+  .mono{font:10px ui-monospace,monospace}
+</style>
+<text x="20" y="22" class="title" fill="#5ad1c9">sky130_bandgap · schematic (floorplan not yet defined)</text>
+</svg>

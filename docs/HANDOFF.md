@@ -1,11 +1,11 @@
 # OpenForge — Session Handoff
 
-**Updated:** 2026-06-20 (review tone + OF-C2C Why field; BSIM CI verified; tangling ≤3)  
-**HEAD (local):** `b062150` on `feat/schematic-orthogonal-router` (pushed)
+**Updated:** 2026-06-21 (schematic 0.9: M4 body-slice fixed via per-net routing margins + active-body slice scorer)  
+**HEAD (local):** `b062150` on `feat/schematic-orthogonal-router` (pushed) — schematic 0.9 changes uncommitted (owner to commit)
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
-**Read order:** this file → `docs/STATUS.md` → `docs/PARKING_LOT.md` → `AGENT_PLAN.md` §0 → `.cursor/skills/openforge-conventions/SKILL.md` → `.cursor/skills/mode-routing/SKILL.md`
+**Read order:** this file → `docs/STATUS.md` → `docs/PARKING_LOT.md` → `AGENT_PLAN.md` §0 → `.cursor/skills/openforge-conventions/SKILL.md` → `.cursor/skills/mode-routing/SKILL.md` → `docs/research/softwaredesign_learnings/` (when schematic/agent reasoning context needed)
 
 Use this file at the **start of every new Cursor window**.
 
@@ -53,6 +53,7 @@ Broader product vision (CEO master plan tail in `AGENT_PLAN.md`): Palantir/Caden
 
 | Item | Notes |
 |------|-------|
+| **Schematic 0.9 — M4 body-slice fixed** | `n1` mirror tie no longer slices through M4's transistor body to reach its gate. Router now uses **per-net obstacle margins** (0 px to own devices for pin breakout, 10 px to others) → routes **around** M4 (`logs/schematic_opamp_m4_fix.svg`). Scorer (`find_bad_crossings`) now catches **same-net transverse slices through active bodies** (was a blind spot). Tests: connectivity **42/42**, no_tangling **7/7** (2 new), netlist_schematic **13/13**. |
 | 0.7 connectivity + IO stubs | Verifier caught 16px gap; tests 10/10 |
 | 0.8 stub-then-fold sign-off | Parent + `dv-verifier` rerun complete: `pytest tests/test_schematic_connectivity.py -v` **14/14 pass**; `logs/schematic_0.8_*.svg` vs 0.7 confirms terminal-stub deltas (`0→21`, `0→20`) |
 | UI hotfix | `renderError()` restored after JS corruption |

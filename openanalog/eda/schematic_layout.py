@@ -305,6 +305,7 @@ def _device_boxes(placed: list[PlacedDevice]) -> list[DeviceBox]:
                 w=width,
                 h=height,
                 terminal_nets=terminal_nets,
+                kind=pd.dev.kind,
             )
         )
     return boxes

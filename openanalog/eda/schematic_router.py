@@ -15,6 +15,11 @@ from openanalog.eda.symbols import Point, pin_escape_profile, snap, symbol_for_d
 
 STUB_LEN = 10
 _ROUTING_MARGIN = 10
+# A net's own pins sit on the device body edge (terminal escapes land exactly on the
+# bounding box). Use a zero margin for devices this net connects to so those pins are
+# reachable (pin breakout) — the bulk interior still blocks via strict-inequality
+# interior tests, so a wire cannot slice through a device it connects to.
+_OWN_DEVICE_MARGIN = 0
 _BEND_PENALTY = 5
 _TRACK_PITCH = 12
 
@@ -109,6 +114,37 @@ def device_obstacles(
         x1 = pd.origin.x + sym.width + margin
         y1 = pd.origin.y + sym.height + margin
         rects.append(Rect(x0, y0, x1, y1))
+    return rects
+
+
+def _device_terminal_nets(pd) -> set[str]:
+    return {
+        node.lower()
+        for node, _, _ in terminal_refs(pd.dev, pd.origin, mirror=pd.mirror)
+    }
+
+
+def device_obstacles_for_net(
+    placed: list,
+    net_name: str,
+    *,
+    own_margin: int = _OWN_DEVICE_MARGIN,
+    other_margin: int = _ROUTING_MARGIN,
+) -> list[Rect]:
+    """Obstacles tuned per net: devices this net connects to keep a small margin
+    (so their pins are reachable for breakout), others keep full clearance."""
+    rects: list[Rect] = []
+    for pd in placed:
+        sym = symbol_for_device(pd.dev)
+        margin = own_margin if net_name in _device_terminal_nets(pd) else other_margin
+        rects.append(
+            Rect(
+                pd.origin.x - margin,
+                pd.origin.y - margin,
+                pd.origin.x + sym.width + margin,
+                pd.origin.y + sym.height + margin,
+            )
+        )
     return rects
 
 
@@ -760,7 +796,6 @@ def route_nets(
 ) -> RouteResult:
     """Route all signal nets for placed devices."""
     rails = rail_names or frozenset({"vdd", "vdd3", "0"})
-    obstacles = device_obstacles(placed)
     passive_names = _passive_dev_names(placed)
 
     net_stubs: dict[str, list[TerminalStub]] = {}
@@ -776,6 +811,7 @@ def route_nets(
     all_stub_points = [s for stubs in net_stubs.values() for s in stubs]
 
     for net_name, stubs in net_stubs.items():
+        obstacles = device_obstacles_for_net(placed, net_name)
         reserved = _wire_obstacles([s for s in all_segments if s.net != net_name])
         exempt_points = {
             (stub.terminal.x, stub.terminal.y) for stub in stubs

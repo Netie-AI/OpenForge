@@ -212,39 +212,41 @@ def test_opamp_n1_does_not_share_nout1_track_at_344_168() -> None:
     assert not any("n1" in e and "nout1" in e for e in overlaps), overlaps
 
 
-def test_opamp_m8_gnd_does_not_share_nb_column_at_192() -> None:
-    """Regression: M8 source GND riser must not collinearly overlap nb bias trunk at x=192."""
-    from openanalog.eda.schematic_layout import all_rail_riser_segments
+def test_opamp_m8_source_gnd_does_not_overlap_nb_bias_trunk() -> None:
+    """Regression: M8 source-GND riser must never collinearly overlap the nb bias
+    trunk. Originally both fought over column x=192; the per-net routing margin
+    lets nb relocate, so the invariant is now the general one (no shared track),
+    not the stale x=192 proxy."""
+    from openanalog.eda.schematic_layout import all_rail_riser_segments, _collect_net_points
     from openanalog.eda.schematic_geometry import Segment, find_collinear_overlaps
 
     result = design(text="RS722 high precision low offset op-amp", budget=40, use_llm=False)
     devices = parse_spice_devices(result["netlist"])
     overlaps = collinear_net_overlap_errors(devices, result)
-    assert not any("x=192" in e and "nb" in e and "0" in e for e in overlaps), overlaps
+    assert not any("nb" in e and "0" in e for e in overlaps), overlaps
     layout = build_schematic_layout(devices, result)
     routed = route_nets(layout.placed)
-    from openanalog.eda.schematic_connectivity import _collect_net_points
-
     nets = _collect_net_points(layout.placed)
     gnd = all_rail_riser_segments(layout.placed, nets, layout.height, routed.segments)
-    gnd_at_192 = [s for s in gnd if s.net == "0" and s.x1 == s.x2 == 192]
-    assert not gnd_at_192, f"M8 GND riser must not use x=192 when nb occupies that column: {gnd_at_192}"
     signal = [
         Segment(s.x1, s.y1, s.x2, s.y2, s.net, s.kind)
         for s in routed.segments
         if s.kind == "wire"
     ]
-    m8_overlap = [
-        (a, b, hit)
+    nb_gnd_overlap = [
+        (a.net, b.net, hit)
         for a, b, hit in find_collinear_overlaps(signal + gnd)
-        if hit[0] == 1 and hit[1] == 192 and {"nb", "0"} <= {a.net, b.net}
+        if {"nb", "0"} <= {a.net, b.net}
     ]
-    assert not m8_overlap, m8_overlap
+    assert not nb_gnd_overlap, nb_gnd_overlap
 
 
-def test_opamp_n1_m4_gate_riser_trimmed_at_380() -> None:
-    """Regression: n1 M4-gate riser should connect jog at y=156, not hang through y=168."""
-    from openanalog.eda.schematic_router import _is_segment_interior
+def test_opamp_n1_m4_gate_riser_routes_around_m4_body() -> None:
+    """Regression (the flagged defect): the n1 mirror tie must reach M4's gate via a
+    riser on M4's outer (right) side and route AROUND the transistor body — it must
+    not jog to mid-body (the old y=156 cut straight across M4's channel)."""
+    from openanalog.eda.schematic_geometry import find_bad_crossings
+    from openanalog.eda.schematic_layout import _device_boxes, _segments_for_score
 
     result = design(text="RS722 high precision low offset op-amp", budget=40, use_llm=False)
     devices = parse_spice_devices(result["netlist"])
@@ -253,8 +255,15 @@ def test_opamp_n1_m4_gate_riser_trimmed_at_380() -> None:
     n1_vert = [s for s in routed.segments if s.net == "n1" and s.x1 == s.x2 == 380]
     assert len(n1_vert) == 1, n1_vert
     seg = n1_vert[0]
-    assert max(seg.y1, seg.y2) == 156, f"expected top at jog y=156, got {seg}"
-    assert min(seg.y1, seg.y2) == 144
-    assert not _is_segment_interior(380, 168, seg)
-    svg = render_schematic_svg(devices, result)
-    assert (380, 156) not in hop_centers(svg)
+    assert min(seg.y1, seg.y2) == 144, f"riser must reach M4 gate at y=144: {seg}"
+    # Must descend past M4's body bottom (y=168) — i.e. route around the body,
+    # not terminate mid-body at the old y=156 slice jog.
+    assert max(seg.y1, seg.y2) >= 168, f"riser must route around M4 body, got {seg}"
+
+    segments, junctions = _segments_for_score(layout)
+    boxes = _device_boxes(layout.placed)
+    m4_slices = [
+        c for c in find_bad_crossings(segments, junctions, boxes)
+        if c.reason == "wire-through-device:M4"
+    ]
+    assert not m4_slices, f"n1 must not slice through M4 body: {m4_slices}"

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 460" width="520" height="460">
+<style>
+  .signal-wire{stroke:#5ad1c9;stroke-width:1.5;fill:none}
+  .signal-wire.rail{stroke-width:2}
+  .dim{font:9px ui-monospace,monospace}
+  .title{font:bold 13px sans-serif}
+  .rail-label{font:bold 11px sans-serif}
+  .mono{font:10px ui-monospace,monospace}
+</style>
+<text x="20" y="22" class="title" fill="#5ad1c9">cmos_transmission_gate · schematic (floorplan not yet defined)</text>
+<g transform="translate(40, 80)">
+<line x1="4" y1="20" x2="10" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<polyline points="10,20 14,12 18,28 22,12 26,28 30,20" fill="none" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="30" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="48" y="132" class="mono" fill="#d6deeb">VSUP</text>
+<g transform="translate(170, 80)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="182" y="140" class="mono" fill="#d6deeb">Mn</text>
+<g transform="translate(300, 80)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,10 28,7 28,13" fill="#7aa2ff"/>
+</g>
+<text x="312" y="140" class="mono" fill="#d6deeb">Mp</text>
+<g transform="translate(40, 170)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="49" y="230" class="mono" fill="#d6deeb">Mnd</text>
+<g transform="translate(170, 170)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,10 28,7 28,13" fill="#7aa2ff"/>
+</g>
+<text x="179" y="230" class="mono" fill="#d6deeb">Mpd</text>
+<g transform="translate(340, 170) scale(-1, 1)">
+<line x1="4" y1="20" x2="10" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<polyline points="10,20 14,12 18,28 22,12 26,28 30,20" fill="none" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="30" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="305" y="222" class="mono" fill="#d6deeb">Rload</text>
+<g transform="translate(80, 260) scale(-1, 1)">
+<line x1="4" y1="20" x2="14" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="18" y1="14" x2="18" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="22" y1="14" x2="22" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="45" y="312" class="mono" fill="#d6deeb">Cload</text>
+<line x1="202" y1="90" x2="202" y2="80" class="signal-wire terminal-stub"/>
+<line x1="332" y1="90" x2="332" y2="80" class="signal-wire terminal-stub"/>
+<line x1="202" y1="80" x2="332" y2="80" class="signal-wire"/>
+<line x1="176" y1="104" x2="166" y2="104" class="signal-wire terminal-stub"/>
+<line x1="332" y1="118" x2="332" y2="128" class="signal-wire terminal-stub"/>
+<line x1="336" y1="190" x2="346" y2="190" class="signal-wire terminal-stub"/>
+<line x1="76" y1="280" x2="86" y2="280" class="signal-wire terminal-stub"/>
+<line x1="166" y1="104" x2="166" y2="124" class="signal-wire"/>
+<path d="M 166 124 A 4 4 0 0 1 166 132" class="signal-wire wire-hop"/>
+<line x1="166" y1="132" x2="166" y2="140" class="signal-wire"/>
+<line x1="166" y1="140" x2="198" y2="140" class="signal-wire"/>
+<path d="M 198 140 A 4 4 0 0 1 206 140" class="signal-wire wire-hop"/>
+<line x1="206" y1="140" x2="332" y2="140" class="signal-wire"/>
+<line x1="332" y1="140" x2="332" y2="128" class="signal-wire"/>
+<line x1="346" y1="190" x2="332" y2="190" class="signal-wire"/>
+<line x1="332" y1="190" x2="332" y2="140" class="signal-wire"/>
+<line x1="86" y1="280" x2="166" y2="280" class="signal-wire"/>
+<line x1="166" y1="140" x2="166" y2="190" class="signal-wire"/>
+<path d="M 166 190 A 4 4 0 0 1 166 198" class="signal-wire wire-hop"/>
+<line x1="166" y1="198" x2="166" y2="214" class="signal-wire"/>
+<path d="M 166 214 A 4 4 0 0 1 166 222" class="signal-wire wire-hop"/>
+<line x1="166" y1="222" x2="166" y2="280" class="signal-wire"/>
+<line x1="202" y1="118" x2="202" y2="128" class="signal-wire terminal-stub"/>
+<line x1="46" y1="194" x2="36" y2="194" class="signal-wire terminal-stub"/>
+<line x1="176" y1="194" x2="166" y2="194" class="signal-wire terminal-stub"/>
+<line x1="202" y1="128" x2="154" y2="128" class="signal-wire"/>
+<line x1="154" y1="128" x2="154" y2="194" class="signal-wire"/>
+<line x1="166" y1="194" x2="36" y2="194" class="signal-wire"/>
+<line x1="306" y1="104" x2="296" y2="104" class="signal-wire terminal-stub"/>
+<line x1="72" y1="180" x2="72" y2="170" class="signal-wire terminal-stub"/>
+<line x1="202" y1="208" x2="202" y2="218" class="signal-wire terminal-stub"/>
+<line x1="296" y1="104" x2="202" y2="104" class="signal-wire"/>
+<line x1="202" y1="104" x2="202" y2="124" class="signal-wire"/>
+<path d="M 202 124 A 4 4 0 0 1 202 132" class="signal-wire wire-hop"/>
+<line x1="202" y1="132" x2="202" y2="218" class="signal-wire"/>
+<line x1="202" y1="218" x2="72" y2="218" class="signal-wire"/>
+<line x1="72" y1="170" x2="72" y2="190" class="signal-wire"/>
+<path d="M 72 190 A 4 4 0 0 1 72 198" class="signal-wire wire-hop"/>
+<line x1="72" y1="198" x2="72" y2="218" class="signal-wire"/>
+<line x1="40" y1="50" x2="480" y2="50" class="signal-wire rail"/>
+<text x="40" y="42" class="rail-label" fill="#5ad1c9">VDD</text>
+<line x1="44" y1="100" x2="44" y2="50" class="signal-wire"/>
+<line x1="202" y1="180" x2="214" y2="180" class="signal-wire"/>
+<line x1="214" y1="180" x2="214" y2="50" class="signal-wire"/>
+<line x1="40" y1="420" x2="480" y2="420" class="signal-wire rail"/>
+<text x="40" y="436" class="dim" fill="#8a97ad">GND</text>
+<line x1="76" y1="100" x2="76" y2="420" class="signal-wire"/>
+<line x1="72" y1="208" x2="84" y2="208" class="signal-wire"/>
+<line x1="84" y1="208" x2="84" y2="420" class="signal-wire"/>
+<line x1="304" y1="190" x2="304" y2="420" class="signal-wire"/>
+<line x1="44" y1="280" x2="44" y2="420" class="signal-wire"/>
+<circle cx="154" cy="194" r="3" fill="#5ad1c9"/>
+<circle cx="166" cy="140" r="3" fill="#5ad1c9"/>
+<circle cx="46" cy="194" r="3" fill="#5ad1c9"/>
+<circle cx="336" cy="190" r="3" fill="#5ad1c9"/>
+<circle cx="72" cy="180" r="3" fill="#5ad1c9"/>
+<circle cx="202" cy="218" r="3" fill="#5ad1c9"/>
+<circle cx="202" cy="208" r="3" fill="#5ad1c9"/>
+<circle cx="332" cy="140" r="3" fill="#5ad1c9"/>
+</svg>
