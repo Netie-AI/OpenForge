@@ -32,6 +32,7 @@ _DEFAULT_MODES: dict[str, dict[str, str]] = {
     "opamp": {
         "aol_dB": "min", "gbp_MHz": "target", "pm_deg": "min", "iq_uA": "max",
         "slew_Vus": "min", "cmrr_dB": "min", "vos_mV": "max", "settle_us": "max",
+        "psrr_dB": "min",
     },
     "comparator": {
         "tp_us": "max", "iq_uA": "max", "vos_mV": "max", "trise_ns": "max", "tfall_ns": "max",
@@ -62,6 +63,7 @@ _INLINE_PATTERNS: dict[str, dict[str, str]] = {
         "iq_uA": r"iq\s*([<>=]?)\s*([\d.]+)\s*uA",
         "slew_Vus": r"slew\s*([<>=]?)\s*([\d.]+)",
         "cmrr_dB": r"cmrr\s*([<>=]?)\s*([\d.]+)",
+        "psrr_dB": r"psrr\s*([<>=]?)\s*([\d.]+)\s*dB",
     },
     "comparator": {
         "tp_us": r"tp\s*([<>=]?)\s*([\d.]+)\s*u?s",

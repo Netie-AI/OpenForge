@@ -85,6 +85,7 @@ let isupp = abs(i(vsup))
 print isupp
 ac dec 25 0.1 1G
 meas ac aol_db   find vdb(vout) at=0.1
+meas ac aol_db_100 find vdb(vout) at=100
 meas ac ph_dc    find vp(vout) at=0.1
 meas ac gbw_hz   when vdb(vout)=0
 meas ac ph_ugf   find vp(vout) when vdb(vout)=0
@@ -93,6 +94,49 @@ meas ac ph_ugf   find vp(vout) when vdb(vout)=0
 """
     ms = resolve_models()
     return "* OpenForge op-amp AC\n" + ms.block + _params_block(p, supply_V, cload_F) + _core(ms) + harness
+
+
+def _build_psrr_deck(p: OpAmpParams, supply_V: float, cload_F: float) -> str:
+    """PSRR: 100 mVpp ripple on VDD, inputs at VCM, measure vout at 100 Hz."""
+    ms = resolve_models()
+    core = _core(ms).replace("VSUP vdd 0 {VDD}", "VSUP vdd 0 dc {VDD} ac 0.1")
+    harness = """
+Vcm  vinn 0 {VCM}
+Vinp vinp 0 {VCM}
+.control
+set filetype=ascii
+op
+ac dec 30 10 1Meg
+meas ac psrr_db find vdb(vout) at=100
+.endc
+.end
+"""
+    return "* OpenForge op-amp PSRR\n" + ms.block + _params_block(p, supply_V, cload_F) + core + harness
+
+
+def _build_cmrr_deck(
+    p: OpAmpParams, supply_V: float, cload_F: float, rl_to_vcm_ohm: float | None = None
+) -> str:
+    """CMRR: common-mode AC drive on both inputs, measure vout at 100 Hz.
+
+    Optional rl_to_vcm_ohm adds a datasheet-style load resistor from VOUT to VCM.
+    """
+    ms = resolve_models()
+    rl_block = ""
+    if rl_to_vcm_ohm is not None and rl_to_vcm_ohm > 0:
+        rl_block = f"Vcmref vcm 0 {{VCM}}\nRcmload vout vcm {rl_to_vcm_ohm}\n"
+    harness = f"""
+Vinp vinp 0 dc {{VCM}} ac 0.1
+Vinn vinn 0 dc {{VCM}} ac 0.1
+{rl_block}.control
+set filetype=ascii
+op
+ac dec 30 10 1Meg
+meas ac acm_db find vdb(vout) at=100
+.endc
+.end
+"""
+    return "* OpenForge op-amp CMRR\n" + ms.block + _params_block(p, supply_V, cload_F) + _core(ms) + harness
 
 
 def _build_tran_deck(p: OpAmpParams, supply_V: float, cload_F: float) -> str:
@@ -116,7 +160,15 @@ meas tran tr_rise trig v(vout) val={lo + 0.1 * (hi - lo)} rise=1 targ v(vout) va
 class OpAmpTopology(Topology):
     circuit_type = "opamp"
     topology_name = "two_stage_miller_opamp"
-    spec_weights = {"pm_deg": 2.0, "gbp_MHz": 1.5, "aol_dB": 1.5, "slew_Vus": 2.0, "iq_uA": 1.0}
+    spec_weights = {
+        "pm_deg": 2.0,
+        "gbp_MHz": 1.5,
+        "aol_dB": 1.5,
+        "slew_Vus": 2.0,
+        "iq_uA": 1.0,
+        "psrr_dB": 0.3,
+        "cmrr_dB": 0.3,
+    }
 
     def default_params(self) -> OpAmpParams:
         return OpAmpParams()
@@ -130,7 +182,7 @@ class OpAmpTopology(Topology):
         }
 
     def measurable_specs(self) -> set[str]:
-        return {"aol_dB", "gbp_MHz", "pm_deg", "iq_uA", "slew_Vus"}
+        return {"aol_dB", "gbp_MHz", "pm_deg", "iq_uA", "slew_Vus", "psrr_dB", "cmrr_dB"}
 
     def estimate_extra(self, params: OpAmpParams, *, cload_F: float = 10e-12) -> dict[str, float]:
         i_tail = params.Iref * (params.W5 / params.Wb) * (params.Lb / params.L5)
@@ -166,6 +218,26 @@ class OpAmpTopology(Topology):
             tr = grab_meas("tr_rise", tout)
             if tok and tr and tr > 0:
                 m.values["slew_Vus"] = (0.8 * 0.5) / (tr * 1e6)
+            ok_psrr, raw_psrr = run_ngspice(
+                _build_psrr_deck(params, supply_V, cload_F), timeout=max(NGSPICE_TIMEOUT, 15)
+            )
+            if ok_psrr:
+                m.raw += "\n" + raw_psrr[-2000:]
+                psrr = grab_meas("psrr_db", raw_psrr)
+                if psrr is not None:
+                    m.values["psrr_dB"] = abs(psrr)
+            ok_cmrr, raw_cmrr = run_ngspice(
+                _build_cmrr_deck(params, supply_V, cload_F), timeout=max(NGSPICE_TIMEOUT, 15)
+            )
+            if ok_cmrr:
+                m.raw += "\n" + raw_cmrr[-2000:]
+                aol_100 = grab_meas("aol_db_100", out)
+                acm_db = grab_meas("acm_db", raw_cmrr)
+                if aol_100 is not None and acm_db is not None:
+                    # CMRR = Ad/Acm. Differential deck uses AC=1 while CM deck uses AC=0.1,
+                    # so Acm gain in dB needs +20 dB normalization before subtraction.
+                    cmrr = aol_100 - (acm_db + 20.0)
+                    m.values["cmrr_dB"] = cmrr if cmrr >= 0 else None
         m.ok = all(m.values.get(k) is not None for k in ("aol_dB", "gbp_MHz", "pm_deg"))
         return m
 

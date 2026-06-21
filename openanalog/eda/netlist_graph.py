@@ -6,10 +6,16 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+# ngspice deck lines like `meas dc ...` falsely match [Mm]\w+ as a MOSFET name.
+_NGSPICE_CTRL_NAMES = frozenset(
+    {"meas", "let", "print", "set", "op", "dc", "tran", "ac", "noise", "fft", "end", "endc"}
+)
 _MOS_RE = re.compile(
     r"^\s*([Mm]\w+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)",
 )
 _TWO_TERM_RE = re.compile(r"^\s*([CcRrIi])(\w+)\s+(\S+)\s+(\S+)")
+_D_RE = re.compile(r"^\s*([Dd])(\w+)\s+(\S+)\s+(\S+)\s+(\S+)")
+_Q_RE = re.compile(r"^\s*([Qq])(\w+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)")
 _VSRC_RE = re.compile(r"^\s*([Vv]\w+)\s+(\S+)\s+(\S+)")
 
 
@@ -36,7 +42,7 @@ def parse_spice_devices(netlist: str) -> list[SpiceDevice]:
         if not line or line.startswith(("*", ".")):
             continue
         m = _MOS_RE.match(line)
-        if m:
+        if m and m.group(1).lower() not in _NGSPICE_CTRL_NAMES:
             devices.append(
                 SpiceDevice(
                     name=m.group(1),
@@ -49,6 +55,28 @@ def parse_spice_devices(netlist: str) -> list[SpiceDevice]:
         m = _TWO_TERM_RE.match(line)
         if m:
             devices.append(SpiceDevice(name=m.group(1) + m.group(2), kind=m.group(1).upper(), nodes=[m.group(3), m.group(4)]))
+            continue
+        m = _D_RE.match(line)
+        if m:
+            devices.append(
+                SpiceDevice(
+                    name=m.group(1) + m.group(2),
+                    kind="D",
+                    nodes=[m.group(3), m.group(4)],
+                    model=m.group(5),
+                )
+            )
+            continue
+        m = _Q_RE.match(line)
+        if m:
+            devices.append(
+                SpiceDevice(
+                    name=m.group(1) + m.group(2),
+                    kind="Q",
+                    nodes=[m.group(3), m.group(4), m.group(5), m.group(6)],
+                    model=m.group(7) if m.lastindex >= 7 else "",
+                )
+            )
             continue
         m = _VSRC_RE.match(line)
         if m:

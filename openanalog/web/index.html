@@ -5,134 +5,135 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>OpenForge — AI Analog EDA</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 :root{
-  --bg:#0d1117;--surface:#161b22;--surface-2:#1c2128;--border:#30363d;
-  --text:#e6edf3;--text-dim:#8b949e;--accent:#3b82f6;
-  --pass:#3fb950;--partial:#d29922;--fail:#f85149;
-  --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  --bg:#070b10;--surface:#0c1219;--surface-2:#111a24;--border:#1a2836;
+  --text:#d4e4f0;--text-dim:#6b8299;--accent:#5ad1c9;--accent-dim:#3a9e97;
+  --glow:rgba(90,209,201,.12);--grid:rgba(90,209,201,.04);
+  --pass:#4ade80;--partial:#fbbf24;--fail:#f87171;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.45}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
-.header-left{display:flex;align-items:center;gap:14px;min-width:0}
-.logo{font-weight:800;font-size:17px;letter-spacing:-.02em}
-.logo span{color:var(--accent)}
-.tag{color:var(--text-dim);font-size:12px;white-space:nowrap}
-.mode-toggle{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
-.mode-btn{background:transparent;border:0;color:var(--text-dim);padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
-.mode-btn.active{background:var(--surface-2);color:var(--text)}
-.mode-btn:focus-visible{outline-offset:-2px}
-.main-grid{display:grid;grid-template-columns:340px 1fr 300px;gap:1px;background:var(--border);min-height:calc(100vh - 110px)}
-@media(max-width:1200px){.main-grid{grid-template-columns:320px 1fr}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.4;
+  background-image:linear-gradient(180deg,var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:48px 48px}
+:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 16px;border-bottom:1px solid var(--border);
+  background:rgba(12,18,25,.92);backdrop-filter:blur(8px);position:sticky;top:0;z-index:10}
+.header-left{display:flex;align-items:baseline;gap:10px;min-width:0}
+.logo{font-weight:700;font-size:14px;letter-spacing:.06em;text-transform:uppercase}
+.logo span{color:var(--accent);text-shadow:0 0 20px var(--glow)}
+.tag{color:var(--text-dim);font-size:10px;letter-spacing:.04em;white-space:nowrap;font-family:var(--mono)}
+.pdk-badge{font-family:var(--mono);font-size:9px;color:var(--accent-dim);border:1px solid var(--border);border-radius:3px;
+  padding:2px 8px;letter-spacing:.06em;text-transform:uppercase;background:rgba(90,209,201,.04)}
+.main-grid{display:grid;grid-template-columns:300px 1fr 280px;gap:1px;background:var(--border);min-height:calc(100vh - 52px)}
+@media(max-width:1200px){.main-grid{grid-template-columns:280px 1fr}}
 @media(max-width:900px){.main-grid{grid-template-columns:1fr}}
-.pane{background:var(--bg);padding:14px 16px;min-height:420px}
-.pane h2{margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim)}
-.panel-divider{border-top:1px solid var(--border);margin:14px 0;padding-top:14px}
-label.field{display:block;margin-bottom:10px}
-label.field .lbl{display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px}
-label.field .tech{font-family:var(--mono);font-size:10px;opacity:.75}
-select,textarea,input[type=text]{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px}
-textarea#inp{min-height:140px;font-family:var(--mono);font-size:12px;resize:vertical}
-.row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-.row label.inline{font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:6px}
-button{border-radius:6px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:opacity .15s}
-button.primary{background:var(--accent);color:#fff}
+.pane{background:var(--bg);padding:10px 12px;min-height:420px}
+.pane h2{margin:0 0 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--accent-dim)}
+.panel-divider{border-top:1px solid var(--border);margin:10px 0;padding-top:10px}
+label.field{display:block;margin-bottom:8px}
+label.field .lbl{display:block;font-size:10px;color:var(--text-dim);margin-bottom:3px;letter-spacing:.06em;text-transform:uppercase}
+label.field .tech{font-family:var(--mono);font-size:9px;opacity:.6}
+.pdk-statement{font-family:var(--mono);font-size:11px;color:var(--text-dim);padding:6px 8px;border:1px solid var(--border);
+  border-radius:4px;background:var(--surface);letter-spacing:.02em}
+select,textarea,input[type=text]{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-size:12px}
+textarea#inp{min-height:120px;font-family:var(--mono);font-size:11px;resize:vertical}
+.row{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.row label.inline{font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:5px}
+button{border-radius:4px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:all .15s;letter-spacing:.02em}
+button.primary{background:var(--accent);color:#070b10}
+button.primary:hover{box-shadow:0 0 16px var(--glow)}
 button.secondary{background:var(--surface);color:var(--text);border-color:var(--border)}
-button:disabled{opacity:.45;cursor:not-allowed}
-button .spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:-2px}
+button.secondary:hover{border-color:var(--accent-dim);color:var(--accent)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button .spin{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;margin-right:5px;vertical-align:-2px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.btn-actions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.btn-actions{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .btn-actions button{width:100%;text-align:left}
-.assisted-hint{font-size:12px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:8px}
-.explore-only{}
-body.mode-assisted .explore-only{display:none!important}
-body.mode-assisted .assisted-only{display:block}
-body.mode-explore .assisted-only{display:none}
-.status-banner{font-family:var(--mono);font-size:12px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:12px;display:flex;flex-direction:column;gap:4px}
-.status-banner.pass{border-color:rgba(63,185,80,.45);background:rgba(63,185,80,.08);color:var(--pass)}
-.status-banner.partial{border-color:rgba(210,153,34,.45);background:rgba(210,153,34,.08);color:var(--partial)}
-.status-banner.fail{border-color:rgba(248,81,73,.45);background:rgba(248,81,73,.08);color:var(--fail)}
-.status-banner.not-simulated,.status-banner.unknown{border-color:rgba(210,153,34,.35);background:rgba(210,153,34,.06);color:var(--partial)}
-.status-banner.error{border-color:rgba(248,81,73,.45);background:rgba(248,81,73,.08);color:var(--fail)}
-.status-banner .sub{font-size:11px;color:var(--text-dim);font-family:Inter,system-ui,sans-serif}
-.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:12px}
-.metric{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px}
-.metric .l{font-size:10px;text-transform:uppercase;color:var(--text-dim);letter-spacing:.04em}
-.metric .v{font-family:var(--mono);font-size:18px;font-weight:600;margin-top:2px}
-.metric.ok{border-color:rgba(63,185,80,.4)}
-.metric.bad{border-color:rgba(248,81,73,.4)}
+.status-banner{font-family:var(--mono);font-size:11px;padding:8px 10px;border:1px solid var(--border);border-radius:4px;margin-bottom:10px;display:flex;flex-direction:column;gap:3px}
+.status-banner.pass{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.06);color:var(--pass)}
+.status-banner.partial{border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.06);color:var(--partial)}
+.status-banner.fail{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.06);color:var(--fail)}
+.status-banner.not-simulated,.status-banner.unknown{border-color:rgba(251,191,36,.25);background:rgba(251,191,36,.04);color:var(--partial)}
+.status-banner.error{border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.06);color:var(--fail)}
+.status-banner .sub{font-size:10px;color:var(--text-dim);font-family:var(--sans)}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px;margin-bottom:10px}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px}
+.metric .l{font-size:9px;text-transform:uppercase;color:var(--text-dim);letter-spacing:.06em}
+.metric .v{font-family:var(--mono);font-size:16px;font-weight:600;margin-top:1px}
+.metric.ok{border-color:rgba(74,222,128,.3)}
+.metric.bad{border-color:rgba(248,113,113,.3)}
 .metric.unmeasured .v{color:var(--text-dim);cursor:help}
-.tabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:8px}
-.tab{padding:5px 10px;border:1px solid transparent;border-radius:4px;cursor:pointer;color:var(--text-dim);font-size:12px;background:transparent}
-.tab.active{color:var(--text);border-color:var(--border);background:var(--surface)}
-.tab:focus-visible{outline-offset:0}
-.tab-panel{min-height:280px}
+.tabs{display:flex;gap:3px;margin-bottom:8px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:6px}
+.tab{padding:4px 8px;border:1px solid transparent;border-radius:3px;cursor:pointer;color:var(--text-dim);font-size:11px;background:transparent;letter-spacing:.04em}
+.tab.active{color:var(--accent);border-color:var(--border);background:var(--surface)}
+.tab-panel{min-height:260px}
 .hidden{display:none!important}
-.empty-state{text-align:center;padding:40px 20px;color:var(--text-dim)}
-.empty-state h3{margin:0 0 8px;color:var(--text);font-size:15px;font-weight:600}
-.empty-state ol{text-align:left;display:inline-block;margin:12px 0 0;padding-left:20px;font-size:13px;line-height:1.7}
-.sch-wrap{background-color:var(--surface-2);background-image:radial-gradient(circle,var(--border) 1px,transparent 1px);background-size:16px 16px;border:1px solid var(--border);border-radius:6px;padding:12px;max-height:480px;overflow:auto}
+.empty-state{text-align:center;padding:32px 16px;color:var(--text-dim)}
+.empty-state h3{margin:0 0 6px;color:var(--text);font-size:14px;font-weight:600}
+.empty-state ol{text-align:left;display:inline-block;margin:10px 0 0;padding-left:18px;font-size:12px;line-height:1.6}
+.sch-wrap{background-color:var(--surface-2);background-image:radial-gradient(circle,rgba(90,209,201,.08) 1px,transparent 1px);
+  background-size:14px 14px;border:1px solid var(--border);border-radius:4px;padding:10px;max-height:520px;overflow:auto;
+  box-shadow:inset 0 0 40px rgba(0,0,0,.3)}
 .sch-wrap svg{max-width:100%;height:auto;display:block;margin:0 auto}
-table.data{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
-table.data th,table.data td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
-table.data th{color:var(--text-dim);font-size:10px;text-transform:uppercase;font-weight:600}
+table.data{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+table.data th,table.data td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--border)}
+table.data th{color:var(--text-dim);font-size:9px;text-transform:uppercase;font-weight:600;letter-spacing:.06em}
 table.data td.num{text-align:right;font-variant-numeric:tabular-nums}
-.role-input{color:#79c0ff}.role-load{color:#ffa657}.role-output{color:#3fb950}
-.netlist-wrap{border:1px solid var(--border);border-radius:6px;overflow:auto;max-height:420px;background:var(--surface);padding:12px 0}
-.netlist-pre{margin:0;padding:0 16px;font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre;color:var(--text);tab-size:2}
-.netlist-pre .gutter{color:var(--text-dim);user-select:none;display:inline-block;min-width:3ch;text-align:right;padding-right:12px}
-.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;font-family:var(--mono)}
-.badge.ok{background:rgba(63,185,80,.15);color:var(--pass)}
-.badge.bad{background:rgba(248,81,73,.15);color:var(--fail)}
-.badge.na{background:rgba(139,148,158,.15);color:var(--text-dim)}
-.ptype-grid{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 10px}
-.ptype{font-size:10px;padding:4px 9px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);cursor:pointer;user-select:none}
-.ptype:hover{border-color:var(--accent);color:var(--text)}
-.ptype.active{border-color:var(--accent);color:var(--accent);background:rgba(59,130,246,.1)}
-.ptype.planned{opacity:.5;border-style:dashed}
-.ptype .st{font-size:9px;margin-left:3px}
-.fam-label{width:100%;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
-.inspector-chat{display:flex;flex-direction:column;gap:8px}
-.inspector-chat textarea{min-height:72px;font-size:13px;font-family:Inter,system-ui,sans-serif}
-.inspector-result{font-family:var(--mono);font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text-dim);min-height:48px;white-space:pre-wrap}
+.role-input{color:#79c0ff}.role-load{color:#ffa657}.role-output{color:#4ade80}
+.netlist-wrap{border:1px solid var(--border);border-radius:4px;overflow:auto;max-height:400px;background:var(--surface);padding:10px 0}
+.netlist-pre{margin:0;padding:0 14px;font-family:var(--mono);font-size:11px;line-height:1.5;white-space:pre;color:var(--text);tab-size:2}
+.netlist-pre .gutter{color:var(--text-dim);user-select:none;display:inline-block;min-width:3ch;text-align:right;padding-right:10px}
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;font-family:var(--mono)}
+.badge.ok{background:rgba(74,222,128,.12);color:var(--pass)}
+.badge.bad{background:rgba(248,113,113,.12);color:var(--fail)}
+.badge.na{background:rgba(107,130,153,.12);color:var(--text-dim)}
+.ptype-grid{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 8px}
+.ptype{font-size:9px;padding:4px 8px;border-radius:3px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);cursor:pointer;user-select:none;letter-spacing:.04em;text-transform:uppercase}
+.ptype:hover{border-color:var(--accent-dim);color:var(--text)}
+.ptype.active{border-color:var(--accent);color:var(--accent);background:rgba(90,209,201,.08);box-shadow:0 0 12px var(--glow)}
+.ptype.planned{opacity:.45;border-style:dashed}
+.ptype .st{font-size:8px;margin-left:2px}
+.fam-label{width:100%;font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
+.inspector-chat{display:flex;flex-direction:column;gap:6px}
+.inspector-chat textarea{min-height:64px;font-size:12px;font-family:var(--sans)}
+.inspector-result{font-family:var(--mono);font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text-dim);min-height:40px;white-space:pre-wrap}
 .inspector-result.ok{color:var(--text)}
-.drc-panel{font-family:var(--mono);font-size:12px}
-.drc-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.drc-panel{font-family:var(--mono);font-size:11px}
+.drc-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)}
 .drc-row span:last-child{color:var(--text-dim)}
-.classification{font-size:12px;color:var(--text-dim);padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:10px}
+.classification{font-size:11px;color:var(--text-dim);padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:8px}
 .classification strong{color:var(--text);font-weight:600}
-.bottom-row{border-top:1px solid var(--border);background:var(--surface);padding:16px 20px}
-.bottom-inner{max-width:1900px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.bottom-row{border-top:1px solid var(--border);background:var(--surface);padding:10px 16px}
+.bottom-inner{max-width:1900px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:800px){.bottom-inner{grid-template-columns:1fr}}
-.bottom-row h3{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim)}
-.ucard{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;cursor:pointer}
-.ucard:hover{border-color:var(--accent)}
-.ucard.active{border-color:var(--accent);background:rgba(59,130,246,.06)}
-.ucard .utitle{font-weight:600;font-size:13px;margin-bottom:3px}
-.ucard .usum{font-size:12px;color:var(--text-dim);line-height:1.4}
-.ucard .utags{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
-.utag{font-size:10px;padding:2px 6px;border-radius:8px;background:rgba(59,130,246,.12);color:var(--accent)}
-.range-row{font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;font-family:var(--mono)}
+.bottom-row h3{margin:0 0 8px;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dim)}
+.ucard{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px;cursor:pointer}
+.ucard:hover{border-color:var(--accent-dim)}
+.ucard.active{border-color:var(--accent);background:rgba(90,209,201,.04);box-shadow:0 0 12px var(--glow)}
+.ucard .utitle{font-weight:600;font-size:12px;margin-bottom:2px}
+.ucard .usum{font-size:11px;color:var(--text-dim);line-height:1.35}
+.ucard .utags{margin-top:4px;display:flex;flex-wrap:wrap;gap:3px}
+.utag{font-size:9px;padding:2px 5px;border-radius:6px;background:rgba(90,209,201,.1);color:var(--accent)}
+.range-row{font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:6px;font-family:var(--mono)}
 .range-row .rk{color:var(--text-dim)}
-.range-note{font-size:11px;color:var(--pass);margin-top:6px}
-footer{text-align:center;padding:8px;color:var(--text-dim);font-size:11px;border-top:1px solid var(--border)}
+.range-note{font-size:10px;color:var(--pass);margin-top:4px}
+footer{text-align:center;padding:5px;color:var(--text-dim);font-size:10px;border-top:1px solid var(--border);font-family:var(--mono);letter-spacing:.04em}
 .mono{font-family:var(--mono)}
-.muted{color:var(--text-dim);font-size:12px}
-#status{font-size:12px;color:var(--text-dim)}
-.compliance-table{margin-top:8px}
+.muted{color:var(--text-dim);font-size:11px}
+#status{font-size:11px;color:var(--text-dim)}
+.compliance-table{margin-top:6px}
 </style>
 </head>
-<body class="mode-explore">
+<body>
 <header>
   <div class="header-left">
     <div class="logo">Open<span>Forge</span></div>
-    <div class="tag">chat → spec → ngspice → netlist + schematic</div>
+    <div class="tag">spec → ngspice → netlist + schematic</div>
   </div>
-  <div class="mode-toggle" role="group" aria-label="Interaction mode">
-    <button type="button" class="mode-btn active" id="modeExplore" aria-pressed="true">Explore</button>
-    <button type="button" class="mode-btn" id="modeAssisted" aria-pressed="false">Assisted</button>
-  </div>
+  <div class="pdk-badge" id="pdkBadge">OpenForge L1</div>
 </header>
 
 <div class="main-grid">
@@ -141,30 +142,25 @@ footer{text-align:center;padding:8px;color:var(--text-dim);font-size:11px;border
     <h2>Input / Spec</h2>
     <div id="ptypeGrid" class="ptype-grid muted">Loading product types…</div>
     <select id="cat" class="hidden" aria-hidden="true"></select>
-    <label class="field">
-      <span class="lbl">Preset <span class="tech">preset</span></span>
-      <select id="preset"><option value="">— custom —</option></select>
-    </label>
+    <div class="field">
+      <span class="lbl">Process design kit</span>
+      <div class="pdk-statement" id="pdkStatement">OpenForge L1 — bundled level-1 MOSFET models</div>
+    </div>
     <label class="field explore-only">
       <span class="lbl">LLM provider <span class="tech">model</span></span>
       <select id="provider"></select>
     </label>
     <label class="field">
-      <span class="lbl">Process design kit <span class="tech">PDK / model_set</span></span>
-      <select id="modelset"><option value="bundled">bundled</option><option value="sky130">sky130</option></select>
-    </label>
-    <label class="field">
-      <span class="lbl">Specification <span class="tech">NL spec</span></span>
+      <span class="lbl">Specification</span>
       <textarea id="inp" placeholder="Natural language, inline spec, or datasheet text…" aria-label="Circuit specification"></textarea>
     </label>
-    <div class="assisted-hint assisted-only">Try: pick preset <strong>RS321</strong>, or type “1 MHz op-amp, low power” — then click Design Chip.</div>
     <div class="row explore-only">
       <button type="button" class="secondary" id="btnSample" aria-label="Load sample specification">Load sample</button>
       <button type="button" class="secondary" id="btnInline" aria-label="Load inline spec">Inline spec</button>
       <label class="inline"><input type="checkbox" id="useLlm" checked/> LLM parse</label>
     </div>
     <label class="field">
-      <span class="lbl">Power budget <span class="tech">budget</span></span>
+      <span class="lbl">Power budget</span>
       <div class="row" style="margin-top:0">
         <input type="range" id="budget" min="40" max="400" step="20" value="200" style="flex:1" aria-valuetext="200 evaluations"/>
         <span class="mono" id="budgetv">200</span>
@@ -172,7 +168,6 @@ footer{text-align:center;padding:8px;color:var(--text-dim);font-size:11px;border
     </label>
     <div class="btn-actions">
       <button type="button" class="primary" id="btnGo" aria-label="Design chip from specification">Design Chip</button>
-      <button type="button" class="secondary" id="btnVerify" aria-label="Test and verify preset">Test &amp; Verify</button>
     </div>
     <div id="status" class="muted" style="margin-top:10px" role="status" aria-live="polite"></div>
   </div>
@@ -182,9 +177,9 @@ footer{text-align:center;padding:8px;color:var(--text-dim);font-size:11px;border
     <h2>Result</h2>
     <div id="emptyState" class="empty-state">
       <h3>Design your first chip</h3>
-      <p>Pick a preset like <strong>RS321</strong>, or describe what you need — then click <strong>Design Chip</strong>.</p>
+      <p>Pick a product type above, describe what you need — then click <strong>Design Chip</strong>.</p>
       <ol>
-        <li>Select a product type or preset</li>
+        <li>Select a product type (op-amp, comparator, switch…)</li>
         <li>Enter a spec (natural language or inline)</li>
         <li>Click Design Chip to generate netlist + schematic</li>
       </ol>
@@ -200,7 +195,13 @@ footer{text-align:center;padding:8px;color:var(--text-dim);font-size:11px;border
         <button type="button" class="tab" role="tab" aria-selected="false" data-t="netlist" id="tabBtn-netlist">Netlist</button>
         <button type="button" class="tab explore-only" role="tab" aria-selected="false" data-t="testsuite" id="tabBtn-testsuite">Test Suite</button>
       </div>
-      <div class="tab-panel" id="tab-schematic"><div class="sch-wrap" id="sch"></div></div>
+      <div class="tab-panel" id="tab-schematic">
+        <div class="row" style="margin-bottom:8px">
+          <button type="button" class="secondary" id="btnCopySvg" aria-label="Copy schematic SVG source">Copy SVG</button>
+          <span id="svgCopyStatus" class="muted"></span>
+        </div>
+        <div class="sch-wrap" id="sch"></div>
+      </div>
       <div class="tab-panel hidden" id="tab-devices"></div>
       <div class="tab-panel hidden" id="tab-eda"></div>
       <div class="tab-panel hidden" id="tab-netlist">
@@ -265,7 +266,7 @@ footer{text-align:center;padding:8px;color:var(--text-dim);font-size:11px;border
 <script>
 const $=s=>document.querySelector(s);
 const $$=s=>document.querySelectorAll(s);
-let META={}, HEALTH={}, lastNetlist='', lastResult={}, activeProduct='opamp', activeUseCase='';
+let META={}, HEALTH={}, lastNetlist='', lastSvg='', lastResult={}, activeProduct='opamp', activeUseCase='';
 let inFlight=false, suitePoll=null;
 
 function fmtVal(v,d=2){
@@ -318,7 +319,7 @@ function statusBannerLabel(st){
 
 function setProcessing(on, msg){
   inFlight=on;
-  ['btnGo','btnVerify','btnEdit'].forEach(id=>{const b=$(`#${id}`); if(b) b.disabled=on||b.dataset.plannedDisabled==='1';});
+  ['btnGo','btnEdit'].forEach(id=>{const b=$(`#${id}`); if(b) b.disabled=on||b.dataset.plannedDisabled==='1';});
   if(on&&msg) $('#status').textContent=msg;
 }
 
@@ -460,16 +461,25 @@ async function renderResult(j, svg){
     <tr><td>Package</td><td>${j.package||eda.package||'—'}</td></tr>
     <tr><td>Symbol</td><td>${eda.kicad_symbol||'—'}</td></tr>
     <tr><td>Footprint</td><td>${eda.kicad_footprint||'—'}</td></tr>
-    <tr><td>Model set</td><td>${j.model_set||'bundled'}</td></tr>
+    <tr><td>Model set</td><td>${j.model_set_label||META.model_set_label||'OpenForge L1'}</td></tr>
   </table>`;
   renderNetlistLines(await resolveNetlist(j));
-  if(svg) $('#sch').innerHTML=svg;
-  else if(j.schematic_svg) $('#sch').innerHTML=j.schematic_svg;
-  else if(j.has_schematic){
+  if(svg){
+    lastSvg=svg;
+    $('#sch').innerHTML=svg;
+  }else if(j.schematic_svg){
+    lastSvg=j.schematic_svg;
+    $('#sch').innerHTML=j.schematic_svg;
+  }else if(j.has_schematic){
     try{
       const sr=await fetch('/api/schematic.svg');
-      if(sr.ok) $('#sch').innerHTML=await sr.text();
+      if(sr.ok){
+        lastSvg=await sr.text();
+        $('#sch').innerHTML=lastSvg;
+      }
     }catch(_){}
+  }else{
+    lastSvg='';
   }
   activateTab('schematic');
 }
@@ -513,7 +523,6 @@ function selectUseCase(id){
   renderUseCases();
   if(u.product_ids&&u.product_ids[0]) selectProduct(u.product_ids[0]);
   if(u.preset_ids&&u.preset_ids[0]){
-    $('#preset').value=u.preset_ids[0];
     const p=META.presets.find(x=>x.id===u.preset_ids[0]);
     if(p){$('#cat').value=p.category;$('#inp').value=p.spec;$('#budget').value=p.budget;$('#budgetv').textContent=p.budget;}
   }
@@ -605,16 +614,16 @@ async function loadMeta(){
   $('#cat').innerHTML=META.categories.map(c=>`<option value="${c}">${c}</option>`).join('');
   renderProductGrid();
   selectProduct(activeProduct);
-  $('#preset').innerHTML='<option value="">— custom —</option>'+
-    (META.presets||[]).map(p=>`<option value="${p.id}">${p.name}${p.expect_pass?' ✓':''}</option>`).join('');
   $('#provider').innerHTML=(META.providers||[]).map(p=>{
     const sel=p.id==='lora'?' selected':'';
     return `<option value="${p.id}"${sel} ${!p.available?'disabled':''}>${p.label}${p.available?'':' (no key)'}</option>`;
   }).join('');
-  if(META.default_model_set) $('#modelset').value=META.default_model_set;
+  const pdkLabel=META.model_set_label||'OpenForge L1 — bundled level-1 MOSFET models';
+  $('#pdkStatement').textContent=pdkLabel;
+  $('#pdkBadge').textContent='OpenForge L1';
   if(META.version){
     const ng=HEALTH.ngspice_available?'ngspice ok':'no ngspice';
-    $('#footerVer').textContent=`PDK: ${$('#modelset').value} · ${ng} · git ${META.version.git_hash} · ${META.version.build_date}`;
+    $('#footerVer').textContent=`PDK: OpenForge L1 · ${ng} · git ${META.version.git_hash} · ${META.version.build_date}`;
   }
   renderSuiteTable(META.presets||[]);
   renderUseCases();
@@ -623,11 +632,6 @@ async function loadMeta(){
 }
 
 $('#budget').oninput=e=>{$('#budgetv').textContent=e.target.value;$('#budget').setAttribute('aria-valuetext',e.target.value);};
-$('#preset').onchange=()=>{
-  const id=$('#preset').value; if(!id) return;
-  const p=META.presets.find(x=>x.id===id);
-  if(p){$('#cat').value=p.category;$('#inp').value=p.spec;$('#budget').value=p.budget;$('#budgetv').textContent=p.budget;}
-};
 $('#btnSample').onclick=()=>{
   const t=META.samples&&META.samples[activeProduct];
   if(t) $('#inp').value=t;
@@ -644,7 +648,7 @@ const runDesign=guardClick(async()=>{
   if(!txt){$('#status').textContent='Enter a specification first.';return;}
   const isInline=/[<>=]/.test(txt)&&txt.length<200&&!/\n/.test(txt);
   const body={budget:+$('#budget').value,use_llm:$('#useLlm').checked,category:$('#cat').value,
-    product_id:activeProduct,llm_provider:$('#provider').value,model_set:$('#modelset').value};
+    product_id:activeProduct,llm_provider:$('#provider').value};
   if(isInline) body.spec=txt; else body.text=txt;
   const btn=$('#btnGo');
   btn.innerHTML='<span class="spin"></span>Designing…';
@@ -659,34 +663,6 @@ const runDesign=guardClick(async()=>{
     $('#status').textContent='Design complete.';
   }catch(e){renderError(String(e));}
   finally{btn.textContent='Design Chip';}
-});
-
-const runVerify=guardClick(async()=>{
-  const id=$('#preset').value;
-  if(!id){$('#status').textContent='Select a preset first.';return;}
-  const btn=$('#btnVerify');
-  btn.innerHTML='<span class="spin"></span>Verifying…';
-  $('#status').textContent='Running verification…';
-  try{
-    const r=await fetch('/api/verify',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({preset_id:id,model_set:$('#modelset').value})});
-    const vj=await r.json();
-    if(vj.error){renderError(vj.error);return;}
-    let merged={...vj,category:vj.category,compliance:vj.compliance,score:vj.score,meets_all:vj.meets_all};
-    const dr=await fetch('/api/last-design');
-    if(dr.ok){
-      const dj=await dr.json();
-      merged={...dj,preset_name:vj.preset_name,passed:vj.passed,expect_pass:vj.expect_pass,
-        meets_all:vj.meets_all,score:vj.score,compliance:vj.compliance||dj.compliance};
-    }
-    let svg='';
-    const sr=await fetch('/api/schematic.svg?preset_id='+encodeURIComponent(id));
-    if(sr.ok) svg=await sr.text();
-    else if(merged.has_schematic){const sr2=await fetch('/api/schematic.svg'); if(sr2.ok) svg=await sr2.text();}
-    await renderResult(merged,svg);
-    $('#status').textContent=vj.passed?'Verification passed.':'Verification finished.';
-  }catch(e){renderError(String(e));}
-  finally{btn.textContent='Test & Verify';}
 });
 
 function renderError(msg){
@@ -742,31 +718,32 @@ async function pollSuite(){
 }
 
 $('#btnGo').onclick=runDesign;
-$('#btnVerify').onclick=runVerify;
 $('#btnEdit').onclick=runEdit;
 $('#btnCopy').onclick=()=>navigator.clipboard.writeText(lastNetlist);
+$('#btnCopySvg').onclick=async()=>{
+  const el=$('#svgCopyStatus');
+  let text=lastSvg;
+  if(!text){
+    const node=$('#sch svg');
+    if(node) text=new XMLSerializer().serializeToString(node);
+  }
+  if(!text){el.textContent='No schematic SVG yet.';return;}
+  try{
+    await navigator.clipboard.writeText(text);
+    el.textContent=`Copied ${text.length} chars — paste into Claude for schematic review.`;
+  }catch(e){el.textContent='Copy failed: '+e;}
+};
 $('#btnDl').onclick=()=>window.open('/api/netlist','_blank');
 $('#btnKicad').onclick=()=>window.open('/api/kicad_sch','_blank');
 $('#btnRunAll').onclick=async()=>{
   if(inFlight) return;
   $('#btnRunAll').disabled=true;
   $('#suiteStatus').textContent='Starting…';
-  await fetch('/api/test-presets',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model_set:$('#modelset').value})});
+  await fetch('/api/test-presets',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
   if(suitePoll) clearInterval(suitePoll);
   suitePoll=setInterval(pollSuite,2000);
   pollSuite();
 };
-
-function setMode(mode){
-  document.body.className=mode==='assisted'?'mode-assisted':'mode-explore';
-  $('#modeExplore').classList.toggle('active',mode==='explore');
-  $('#modeAssisted').classList.toggle('active',mode==='assisted');
-  $('#modeExplore').setAttribute('aria-pressed',mode==='explore'?'true':'false');
-  $('#modeAssisted').setAttribute('aria-pressed',mode==='assisted'?'true':'false');
-}
-$('#modeExplore').onclick=()=>setMode('explore');
-$('#modeAssisted').onclick=()=>setMode('assisted');
 
 loadMeta();
 </script>

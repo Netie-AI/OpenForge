@@ -1,0 +1,18 @@
+---
+description: Evidence-first gatekeeping for OpenForge execution and verification
+alwaysApply: true
+---
+
+# OpenForge Evidence Floor
+
+Evidence beats claims.
+
+- Never accept "done" without attached proof.
+- Require scoped diff for code claims.
+- Require verbatim command output for verification claims.
+- Require artifact path/contents for artifact claims.
+- Require explicit `not verified` for missing checks.
+
+Use gate states precisely: `working`, `partial`, `broken`, `unverified`.
+
+Subagent default: `dv-verifier` is read-only and blocking for gate-critical checks.

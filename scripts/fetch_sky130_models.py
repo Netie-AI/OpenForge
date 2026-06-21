@@ -92,8 +92,14 @@ def main() -> int:
 
     # Parasitic BJT models (builtin — not always in separate spice files)
     parts.append("* --- parasitic BJT (builtin) ---")
-    parts.append(".model sky130_fd_pr__npn_11v0 npn (is=1e-16 bf=100 nf=1.0 vaf=50 ikf=1e-3)")
-    parts.append(".model sky130_fd_pr__pnp_11v0 pnp (is=1e-16 bf=80 nf=1.0 vaf=40 ikf=1e-3)")
+    parts.append(
+        ".model sky130_fd_pr__npn_11v0 npn (is=1e-16 bf=100 nf=1.0 vaf=50 ikf=1e-3"
+        " xti=3 eg=1.11)"
+    )
+    parts.append(
+        ".model sky130_fd_pr__pnp_11v0 pnp (is=1e-16 bf=80 nf=1.0 vaf=40 ikf=1e-3"
+        " xti=3 eg=1.11)"
+    )
     parts.append("")
 
     if len(parts) <= 3:

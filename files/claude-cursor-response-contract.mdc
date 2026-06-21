@@ -1,0 +1,32 @@
+---
+description: Enforce a shared Claude-Cursor handoff format (OF-C2C-v1)
+alwaysApply: true
+---
+
+# Claude-Cursor Response Contract (OF-C2C-v1)
+
+Start each cross-agent handoff with:
+
+Protocol: OF-C2C-v1
+Role: `<Claude reviewer | Cursor executor>`
+Intent: `<review | execution | clarification>`
+Decision: `<accept | accept_with_followup | needs_patch | needs_runtime_verification | blocked>`
+
+Claude reply sections:
+
+1. Findings (highest severity first)
+2. Evidence accepted
+3. Missing evidence / open questions
+4. Cursor next steps — exact commands, not descriptions of commands
+
+Cursor reply sections:
+
+1. Implemented
+2. Verification output (verbatim command output, not a description of what ran)
+3. **Evidence for review — literal `git diff` output for every file claimed changed.** A list of file paths is not evidence. If the diff is too large to paste in full, paste `git diff --stat` plus the diff for the highest-risk files, and offer the rest on request.
+4. Not verified
+5. Message for Claude
+
+## Enforcement note
+
+A Cursor report that claims files were "added," "updated," or "fixed" without the matching `git diff` (or `git status --short` for new/deleted files) attached in section 3 is incomplete by this contract. Claude should return `Decision: accept_with_followup` at minimum and ask for the diff before treating any claim in that report as accepted — a file-path list describing a change is a summary, not evidence.

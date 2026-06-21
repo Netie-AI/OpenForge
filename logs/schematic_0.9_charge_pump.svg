@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 550 860" width="550" height="860">
+<style>
+  .signal-wire{stroke:#5ad1c9;stroke-width:1.5;fill:none}
+  .signal-wire.rail{stroke-width:2}
+  .dim{font:9px ui-monospace,monospace}
+  .title{font:bold 13px sans-serif}
+  .rail-label{font:bold 11px sans-serif}
+  .mono{font:10px ui-monospace,monospace}
+</style>
+<text x="20" y="22" class="title" fill="#5ad1c9">dickson_charge_pump · schematic (floorplan not yet defined)</text>
+<g transform="translate(140, 120)">
+<line x1="4" y1="20" x2="10" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<polyline points="10,20 14,12 18,28 22,12 26,28 30,20" fill="none" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="30" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="145" y="172" class="mono" fill="#d6deeb">Rload</text>
+<g transform="translate(40, 530)">
+<line x1="4" y1="20" x2="10" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<polyline points="10,20 14,12 18,28 22,12 26,28 30,20" fill="none" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="30" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="48" y="582" class="mono" fill="#d6deeb">Vsup</text>
+<g transform="translate(170, 530)">
+<line x1="4" y1="20" x2="10" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<polyline points="10,20 14,12 18,28 22,12 26,28 30,20" fill="none" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="30" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="175" y="582" class="mono" fill="#d6deeb">Vclk1</text>
+<g transform="translate(300, 530)">
+<line x1="4" y1="20" x2="10" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<polyline points="10,20 14,12 18,28 22,12 26,28 30,20" fill="none" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="30" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="305" y="582" class="mono" fill="#d6deeb">Vclk2</text>
+<g transform="translate(430, 530)">
+<line x1="4" y1="20" x2="14" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="18" y1="14" x2="18" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="22" y1="14" x2="22" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="432" y="582" class="mono" fill="#d6deeb">Cboot0</text>
+<g transform="translate(80, 620) scale(-1, 1)">
+<line x1="4" y1="20" x2="14" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="18" y1="14" x2="18" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="22" y1="14" x2="22" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="42" y="672" class="mono" fill="#d6deeb">Cboot1</text>
+<g transform="translate(170, 620)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,10 28,7 28,13" fill="#7aa2ff"/>
+</g>
+<text x="179" y="680" class="mono" fill="#d6deeb">Mn0</text>
+<g transform="translate(300, 620)">
+<line x1="6" y1="10" x2="6" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="16" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="10" x2="32" y2="10" stroke="#7aa2ff" stroke-width="1.5"/>
+<line x1="16" y1="38" x2="32" y2="38" stroke="#7aa2ff" stroke-width="1.5"/>
+<polygon points="22,38 28,35 28,41" fill="#7aa2ff"/>
+</g>
+<text x="309" y="680" class="mono" fill="#d6deeb">Mn1</text>
+<g transform="translate(430, 620)">
+<line x1="4" y1="20" x2="14" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="18" y1="14" x2="18" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="22" y1="14" x2="22" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="435" y="672" class="mono" fill="#d6deeb">Cfly1</text>
+<g transform="translate(80, 710) scale(-1, 1)">
+<line x1="4" y1="20" x2="14" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="18" y1="14" x2="18" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="22" y1="14" x2="22" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="45" y="762" class="mono" fill="#d6deeb">Cfly2</text>
+<g transform="translate(170, 710)">
+<line x1="4" y1="20" x2="14" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="18" y1="14" x2="18" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="22" y1="14" x2="22" y2="26" stroke="#5ad1c9" stroke-width="1.5"/>
+<line x1="26" y1="20" x2="36" y2="20" stroke="#5ad1c9" stroke-width="1.5"/>
+</g>
+<text x="178" y="762" class="mono" fill="#d6deeb">Cout</text>
+<line x1="144" y1="140" x2="134" y2="140" class="signal-wire terminal-stub"/>
+<line x1="332" y1="630" x2="332" y2="620" class="signal-wire terminal-stub"/>
+<line x1="44" y1="730" x2="34" y2="730" class="signal-wire terminal-stub"/>
+<line x1="174" y1="730" x2="164" y2="730" class="signal-wire terminal-stub"/>
+<line x1="174" y1="550" x2="164" y2="550" class="signal-wire terminal-stub"/>
+<line x1="44" y1="640" x2="34" y2="640" class="signal-wire terminal-stub"/>
+<line x1="304" y1="550" x2="294" y2="550" class="signal-wire terminal-stub"/>
+<line x1="466" y1="550" x2="476" y2="550" class="signal-wire terminal-stub"/>
+<line x1="434" y1="550" x2="424" y2="550" class="signal-wire terminal-stub"/>
+<line x1="176" y1="644" x2="166" y2="644" class="signal-wire terminal-stub"/>
+<line x1="76" y1="640" x2="86" y2="640" class="signal-wire terminal-stub"/>
+<line x1="306" y1="644" x2="296" y2="644" class="signal-wire terminal-stub"/>
+<line x1="202" y1="658" x2="202" y2="668" class="signal-wire terminal-stub"/>
+<line x1="332" y1="658" x2="332" y2="668" class="signal-wire terminal-stub"/>
+<line x1="466" y1="640" x2="476" y2="640" class="signal-wire terminal-stub"/>
+<line x1="76" y1="730" x2="86" y2="730" class="signal-wire terminal-stub"/>
+<line x1="202" y1="668" x2="332" y2="668" class="signal-wire"/>
+<line x1="476" y1="640" x2="332" y2="640" class="signal-wire"/>
+<line x1="332" y1="640" x2="332" y2="668" class="signal-wire"/>
+<line x1="86" y1="730" x2="202" y2="730" class="signal-wire"/>
+<line x1="202" y1="730" x2="202" y2="668" class="signal-wire"/>
+<line x1="40" y1="50" x2="510" y2="50" class="signal-wire rail"/>
+<text x="40" y="42" class="rail-label" fill="#5ad1c9">VDD</text>
+<line x1="44" y1="550" x2="44" y2="50" class="signal-wire"/>
+<line x1="202" y1="630" x2="202" y2="50" class="signal-wire"/>
+<line x1="434" y1="640" x2="434" y2="50" class="signal-wire"/>
+<line x1="40" y1="820" x2="510" y2="820" class="signal-wire rail"/>
+<text x="40" y="836" class="dim" fill="#8a97ad">GND</text>
+<line x1="176" y1="140" x2="176" y2="820" class="signal-wire"/>
+<line x1="76" y1="550" x2="76" y2="820" class="signal-wire"/>
+<line x1="206" y1="550" x2="206" y2="820" class="signal-wire"/>
+<line x1="336" y1="550" x2="336" y2="820" class="signal-wire"/>
+<line x1="206" y1="730" x2="206" y2="820" class="signal-wire"/>
+<circle cx="332" cy="658" r="3" fill="#5ad1c9"/>
+<circle cx="466" cy="640" r="3" fill="#5ad1c9"/>
+<circle cx="332" cy="668" r="3" fill="#5ad1c9"/>
+<circle cx="202" cy="668" r="3" fill="#5ad1c9"/>
+</svg>

@@ -1,4 +1,4 @@
-# OpenForge category status (updated 2026-06-19)
+# OpenForge category status (updated 2026-06-20)
 
 Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes.py`.
 
@@ -8,8 +8,9 @@ Honest state against **RS-series envelopes** in `openanalog/forge/spec_envelopes
 |------|------|-------------|
 | **`docs/HANDOFF.md`** | **Master handoff** — short-term goal, long-term north star, next-window prompt | Every meaningful checkpoint (not only session end) |
 | **`docs/STATUS.md`** | Evidence-backed phase/category status (this file) | After a verified run changes a phase gate |
+| **`docs/semicon-log.md`** | Structural questions + predictions before sizing | When a topology idealization must be tested before param sweeps |
 | **`AGENT_PLAN.md`** | Phase order, exit criteria, verify/check/improve loop | When roadmap gates or rules change |
-| **`.cursor/.skills/SKILL.md`** | Cursor agent conventions (evidence, handoff discipline) | When workflow rules change |
+| **`.cursor/skills/openforge-conventions/SKILL.md`** | Cursor agent conventions (evidence, handoff discipline) | When workflow rules change |
 
 **Short-term vs long-term:** `HANDOFF.md` owns both — "Short term (do next)" table and "North star (long term)". `STATUS.md` does not duplicate goals; it records what is proven true/false per phase.
 
@@ -118,6 +119,19 @@ All four have named behavioral tests in CI. Run `make smoke-wsl` on pushed HEAD 
 
 Reproduce: `python scripts/verify_phase2.py` (WSL, ngspice on PATH).
 
+## PVT / testbench — PSRR @ 100 Hz (2026-06-20)
+
+**Bench:** AC ripple on supply (`ac 0.1` on VDD/Vin), `meas ac psrr_db find vdb(vout|vref) at=100`. Implemented in `opamp.py`, `ldo.py` (pre-existing), `vref.py`. **Not yet in `DEV_MODE_SPECS`** — measurement-only until envelope gate added.
+
+| Category | Defaults | Sized | Datasheet ref | Notes |
+|----------|----------|-------|---------------|-------|
+| opamp (bundled) | **20.0 dB** | **54.7 dB** (seed=42) | RS321 typ **85 dB** | **Not structural floor** — W3 (PMOS mirror load) is causal knob: W3=150 µm → **83.1 dB** (`diag_opamp_psrr_breakdown.py`). Sized s42 misses because PSRR **not in `DEV_MODE_SPECS`** — sizer blind spot, not topology limit. See `semicon-log.md` entry 5. |
+| opamp CMRR @100 Hz (bundled) | **152.0 dB** (open-loop) / **127.4 dB** (RL=10k) | **151.4 / 142.4 dB** (s42) | RS321 typ **80 dB** | **Option B parked** — bench-only, not in `DEV_MODE_SPECS`. RL=10k fixture run (2026-06-20): **−24.6 dB** on defaults, **−9.0 dB** sized; rl10k still **47 dB above** typ. Mismatch ceiling: zero device mismatch in deck (`PARKING_LOT.md` Monte Carlo Phase 4+). **No further CMRR diagnostics until MC lands.** |
+| ldo (bundled) | **102.7 dB** | **114.0 dB** (seed=23 gate) | ~60 dB floor (informative) | Pre-existing `_build_ac_deck`; strong rejection. **Note:** seed=7 in early verify run failed **dropout/line_reg** only — wrong demo seed, not PSRR regression. |
+| vref (SKY130 L1 BJT placeholders) | **86.1 dB** | — | line_reg 1.3 mV (DC) | AC PSRR ~86 dB at 100 Hz; iq still open (Option B) |
+
+Reproduce: `python scripts/verify_psrr.py`, `python scripts/verify_cmrr.py` (WSL). Opamp causal sweeps: `python scripts/diag_opamp_psrr_breakdown.py`, `python scripts/diag_opamp_cmrr_breakdown.py`, `python scripts/diag_opamp_cmrr_fixture.py`. BSIM Lb follow-up: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/diag_opamp_cmrr_breakdown.py --lb-only`. **No pytest PSRR/CMRR assertions yet** — bench-only until envelope gate.
+
 ## Phase 0 — Infrastructure (2026-06-17)
 
 | Item | Status | Notes |
@@ -126,6 +140,7 @@ Reproduce: `python scripts/verify_phase2.py` (WSL, ngspice on PATH).
 | 0.5 netlist/schematic rendering | ✅ | **Frontend:** netlist tab line-number table collapsed content column → fixed with `<pre>` + gutter spans. **Backend:** `netlist_graph.py` emits device-level schematic (M1…Mn + wires) instead of OPAMP block symbol |
 | 0.6 schematic layout (floorplan) | ✅ | Role-based floorplans for `two_stage_miller_opamp` + `diff_pair_comparator`: fixed MOSFET symbols, orthogonal routing, VDD/GND rails, junction dots at 3+-way ties. **Note:** mirrored-device wire endpoints were misaligned at 0.6 ship (grid snap after mirror transform); fixed in 0.7. |
 | 0.7 schematic connectivity verification | ✅ | `openanalog/eda/schematic_connectivity.py` + `tests/test_schematic_connectivity.py`: terminal-to-wire match (anchors from `symbols.py`), netlist-to-schematic adjacency on placed devices, no dangling routed endpoints, no false junction dots on unrelated-net crossings. Sample SVGs in `logs/schematic_0.7_*.svg`. |
+| 0.8 gate-stub-then-fold sign-off | ✅ | Parent + blocking `dv-verifier` rerun: `python -m pytest tests/test_schematic_connectivity.py -v` (**14/14 pass**). Artifact compare confirms 0.8 differs from 0.7 and adds terminal stubs (`two_stage_miller_opamp`: **0→21**, `diff_pair_comparator`: **0→20**), with `io-stub` preserved (`3→3` both). |
 | CI (GitHub Actions) | ✅ | Was **red from `f0d8324` (0.6) through `91d07d1` (0.7)** without anyone checking Actions on push — process gap, not a silent ngspice miss. **Cause:** `win_path_to_wsl()` called `Path.resolve()` on `C:/…` paths; on Linux CI that produces garbage paths → `test_config_ngspice.py` failed. **Not** missing ngspice — workflow already runs `apt-get install ngspice`. Fixed in `openanalog/config.py`. **Done means:** local pass + CI green on pushed HEAD. |
 | Default WSL distro | ⚠️ | docker-desktop is default; ngspice lives in **Ubuntu** — set `OPENFORGE_WSL_DISTRO=Ubuntu` |
 | Phase 5 infra (vLLM / TurboQuant / serving) | ⏸ | Deferred until trained LoRA adapter exists — no install/wiring this session |
@@ -157,19 +172,19 @@ $env:OPENFORGE_WSL_DISTRO='Ubuntu'
 
 **Zero-trust checkpoint:** evidence in `evidence/zerotrust_checkpoint_2026-06-19/` plus follow-up in `evidence/phase3_*_2026-06-19.log`.
 
-**SKY130/BSIM CI gap:** All SKY130 and BSIM work verified **locally only** — CI runs Phase 1 bundled-model behavioral tests only; **zero SKY130/BSIM coverage in GitHub Actions** until an explicit workflow step is added.
+**SKY130/BSIM CI status:** Local SKY130/BSIM verified at pushed HEAD `55ff958` (WSL smoke **5/5**, vref deferred). **GitHub Actions verified 2026-06-20:** [PR #1](https://github.com/Netie-AI/OpenForge/pull/1) — run [**#27875600582**](https://github.com/Netie-AI/OpenForge/actions/runs/27875600582) green (`sky130-bsim-smoke` **pass** 1m48s, `test` **pass** 4m49s) on branch `feat/schematic-orthogonal-router`.
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Config switch | ✅ | `OPENFORGE_MODEL_SET=bundled\|sky130`; `OPENFORGE_SKY130_CARD=level1\|bsim` |
 | SKY130 level-1 smoke (5/5) | ⚠️ **not real SKY130** | **5/5 pass is against a hand-written level=1 placeholder** (`SKY130_MODELS_BUILTIN` in `openanalog/sim/models.py`) — SKY130-style device names, **not** loaded from `data/pdk/sky130/models.sp`, not BSIM4. **Do not treat as silicon validation.** |
 | BSIM subckt emit | ✅ | `mos_line`/`mos_inst` emit `X` instances for fetched BSIM4 subckts |
-| BSIM card sim | ✅ **5/5 smoke on pinned v0.13.0** | Root cause of pfet crash: missing BSIM mismatch `.param`s + newline glue bug — fixed in `openanalog/sim/models.py`. Models pinned to **`google/skywater-pdk-libs-sky130_fd_pr@v0.13.0`** (`2997061e…`). Re-run: `evidence/phase3_bsim_smoke_rerun_2026-06-19.log` — opamp **AOL=105.5 dB**, GBP=1.09 MHz, PM=75° (seed=42). Prior 4/5 log (`sky130_bsim_smoke_raw.log`, AOL=82 dB) was pre-fix / unstable AC on broken pfet path — **superseded.** |
+| BSIM card sim | ✅ **5/5 smoke on pinned v0.13.0** | Root cause of pfet crash: missing BSIM mismatch `.param`s + newline glue bug — fixed in `openanalog/sim/models.py`. Models pinned to **`google/skywater-pdk-libs-sky130_fd_pr@v0.13.0`** (`2997061e…`). Re-run: `evidence/phase3_bsim_smoke_rerun_2026-06-19.log` — opamp **AOL=105.5 dB**, GBP=1.09 MHz, PM=75° (seed=42). **Local rerun 2026-06-20** (`OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80`) remained **5/5 pass** with vref deferred. Prior 4/5 log (`sky130_bsim_smoke_raw.log`, AOL=82 dB) was pre-fix / unstable AC on broken pfet path — **superseded.** |
 | Switch Ron seed sensitivity (BSIM) | ✅ **5/5 pass** | Seeds 1,3,7,11,12 @ budget=150: Ron **39.8–49.4 Ω** (all `<50 Ω`). Tight but robust — not a single lucky seed. `evidence/phase3_switch_bsim_seeds_2026-06-19.log` |
 | Opamp AOL on BSIM | ✅ **closed (seed=42 gate)** | Sizer closes via **L1↑ (0.5→2.37 µm)**, **W3→60 µm**, **W7→120 µm**, **Iref↓**, **Cc→0** for GBP trim. Causal: short L1 on BSIM4 collapsed input-pair ro → ~82 dB AOL when pfet AC sim was broken; longer L1 restores DC gain once models.py fix lands. Seed sweep (budget=200): **3/5 pass** (seeds 3,7,42); seed=1 misses GBP by 0.2%; seed=99 misses iq — **AOL passes all 5 seeds** (94–105 dB). The Phase 3 BSIM smoke **5/5** headline is the locked gate run at **seed=42**, while the separate robustness sweep over seeds **1/3/7/42/99** is **3/5 meets_all**. Same gate discipline as Phase 1d. `evidence/phase3_opamp_bsim_seeds_2026-06-19.log` |
-| vref bandgap | ⏳ **partial** | Topology runs on SKY130 BJTs (`scripts/verify_phase3_vref.py`). Default deck is **resistor divider → ~1.2 V**; BJT PTAT branch not wired to output. RS431 **line_reg fails** (~600 mV vs `<5 mV` bar) — needs real bandgap, not divider tweak. `resolve_models()` now honors `OPENFORGE_MODEL_SET` when context unset. |
+| vref bandgap | ⏳ **Option B — topology validated, iq open** | **PTAT/CTAT + real diff-pair error amp** (not VCVS). `.op` converges; V(ra1)≈V(qp1). **2026-06-20 decision:** honest partial on placeholder BJTs — **do not** pursue iq via sizing (structural floor ~166 µA; sized ~139 µA; see `semicon-log.md` entry 3). Verify gate: `scripts/verify_phase3_vref.py` exit 1 on iq. **Reopen Option A** only for hard RS431 iq demo or real BJT cards. Defaults **vref=1.146 V** (34 mV below 1.18 V floor); **line_reg=1.30 mV** ✅. |
 | Model pin | ✅ **fetch script pinned** | `scripts/fetch_sky130_models.py` + `data/pdk/sky130/PIN.txt`: tag **v0.13.0**, commit **2997061e461c71e6e5c85153e3403ca74c62f69c**. **Volare still not installed** — pin is via raw GitHub fetch, not volare-managed PDK tree. |
-| CI | ✅ | Run **#19** green on pushed HEAD `7dc7182` — Phase 1 behavioral gate only; does not exercise SKY130 BSIM path |
+| CI | ✅ | [Actions run #27875600582](https://github.com/Netie-AI/OpenForge/actions/runs/27875600582) green on [PR #1](https://github.com/Netie-AI/OpenForge/pull/1) @ `55ff958` — `sky130-bsim-smoke` + `test` pass (2026-06-20). Local WSL BSIM smoke **5/5** re-verified at prior HEADs. |
 
 Reproduce BSIM smoke: `OPENFORGE_MODEL_SET=sky130 OPENFORGE_SKY130_CARD=bsim python scripts/smoke_all.py 80` (WSL)  
 Switch seeds: `python scripts/verify_phase3_switch_bsim_seeds.py`  
@@ -187,8 +202,13 @@ Opamp diag: `python scripts/diag_phase3_opamp_bsim_aol.py`
 | multiplier  | ⚠️      | ⚠️                           | Gilbert cell experimental (partial)|
 | vref        | ⏸      | ⏸                            | BJT needed; deferred until BSIM path works |
 
-## Schematic / Phase 7 (2026-06-16, updated 2026-06-18)
+## Schematic / Phase 7 (2026-06-16, updated 2026-06-21)
 - **0.7:** Automated schematic connectivity checks — terminal anchors from `symbols.py` must match routed wires; netlist adjacency must match wire graph for placed devices; CI via `tests/test_schematic_connectivity.py`. Fixed mirrored-terminal routing (removed post-mirror grid snap that pulled M2 source off `(344,268)`).
+- **0.9 device-aware routing (2026-06-21):** Fixed the `n1` mirror-tie slicing straight through **M4's transistor body** to reach its gate (the flagged `y=156` jog across `x[344,370]`). Two-part fix, both in the browser render path:
+  - **Router (`schematic_router.py`):** per-net obstacle margins — a net keeps a small (0 px) margin to devices it *connects to* (so pin-breakout escapes on the body edge are reachable) and full clearance (10 px) to devices it does not. The `n1` tie now reaches M4's gate by routing **around** the body (down to `y=180`, across, up `x=380`), crossing `nout1` as two clean **wire-hops** rather than a body slice.
+  - **Scorer (`schematic_geometry.py`):** `find_bad_crossings` now flags a same-net wire that transversely slices an **active transistor body** (full-span enter/exit opposite faces). Previously any wire on a device's own net was exempted, so the M4 cut was invisible (`crossing_score` read clean). Passive taps (Miller cap) and pin-escape stubs are correctly **not** flagged.
+  - **Evidence:** regenerated `logs/schematic_opamp_m4_fix.svg`; five-category trace `scripts/diag_schematic_five_category_trace.py` @ `4de4664`: **opamp/comparator/charge_pump/vref PASS** (0 active slices, 0 collinear, 0 false dots); **switch FAIL** — 5 `ctrl`/`ctrl_n` body slices on Mn/Mnd/Mpd (`logs/schematic_0.9_switch.svg`, `logs/five_category_trace.txt`). Schematic gate **not fully closed** until switch ctrl routing fixed.
+- **0.8+ tangling guard:** **`crossing_score` target met (≤3 historical; opamp now 2 with stricter active-body slice scoring).** Passive tap second pass (`schematic_router.py`, 2026-06-20): **6→3**; pytest **19/19** (5 tangling + 14 connectivity). `files/` bundle reference-only.
 - **0.6:** Role-based schematic layout — MOSFET symbols with fixed gate/drain/source geometry, orthogonal Manhattan wires, VDD/GND rails, per-topology floorplans (`two_stage_miller_opamp`, `diff_pair_comparator`). Shipped with mirrored wire offset bug (see 0.7). KiCad export still uses one library symbol — unchanged.
 - **0.5 (fixed):** Web UI netlist tab + netlist-driven device graph SVG (M1–M8 boxes with node wires). KiCad export still uses one library symbol — unchanged.
 - **Prior diagnosis (still true for KiCad):** `kicad_sch.py` emits one KiCad library chip symbol + power rails — no `Device:M` / per-transistor symbols.

@@ -1,6 +1,10 @@
 """
-Voltage reference — bandgap on SKY130 parasitic BJTs (Phase 3).
-Deferred on bundled level-1 MOSFET models.
+Voltage reference — PTAT+CTAT bandgap on SKY130 parasitic BJTs (Phase 3).
+
+Substrate PNP pair (1x / 8x) generates ΔVbe; resistor ratio sums CTAT + PTAT to ~1.2 V.
+No VDD-to-vref divider — output is a bandgap stack (see scripts/diag_vref_pnp_ideal.py).
+
+Deferred on bundled level-1 MOSFET-only models (no SKY130 BJT cards).
 """
 
 from __future__ import annotations
@@ -16,19 +20,49 @@ from openanalog.forge.topologies.base import (
     register,
     run_ngspice,
 )
-from openanalog.sim.models import resolve_models, mos_line
+from openanalog.forge.blocks.current_mirror import emit_pmos_load
+from openanalog.forge.blocks.differential_pair import emit as emit_diff_pair
+from openanalog.sim.models import ResolvedModels, mos_line, resolve_models
 
 _PHASE3_MSG = (
     "vref deferred on bundled models: requires SKY130 parasitic BJTs. "
     "Set OPENFORGE_MODEL_SET=sky130 to enable bandgap reference."
 )
 
+# Structural diagnosis (2026-06-19): defaults target RS431 vref≈1.2 V on builtin BJT cards;
+# line_reg remains above the 5 mV bar until bias/mirror sizing closes the loop.
+_DEFAULT_RPTAT_OHM = 1000.0
+_DEFAULT_RSCALE_OHM = 8400.0
+_DEFAULT_MIRROR_L_UM = 3.0
+# Opamp input-stage defaults (Phase 1d / BSIM-validated sizing philosophy)
+_DEFAULT_AMP_W1_UM = 8.0
+_DEFAULT_AMP_L1_UM = 1.0
+_DEFAULT_AMP_W3_UM = 8.0
+_DEFAULT_AMP_L3_UM = 1.0
+_DEFAULT_AMP_W5_UM = 16.0
+_DEFAULT_AMP_L5_UM = 1.0
+_DEFAULT_AMP_WB_UM = 8.0
+_DEFAULT_AMP_LB_UM = 1.0
+_DEFAULT_IREF_AMP_UA = 15.0
+
 
 @dataclass
 class VRefParams:
-    r1_ohm: float = 38000.0
-    r2_ohm: float = 12000.0
-    ibias_uA: float = 5.0
+    rptat_ohm: float = _DEFAULT_RPTAT_OHM
+    rscale_ohm: float = _DEFAULT_RSCALE_OHM
+    mirror_l_um: float = _DEFAULT_MIRROR_L_UM
+
+    mirror_w_um: float = 8.0
+
+    amp_w1_um: float = _DEFAULT_AMP_W1_UM
+    amp_l1_um: float = _DEFAULT_AMP_L1_UM
+    amp_w3_um: float = _DEFAULT_AMP_W3_UM
+    amp_l3_um: float = _DEFAULT_AMP_L3_UM
+    amp_w5_um: float = _DEFAULT_AMP_W5_UM
+    amp_l5_um: float = _DEFAULT_AMP_L5_UM
+    amp_wb_um: float = _DEFAULT_AMP_WB_UM
+    amp_lb_um: float = _DEFAULT_AMP_LB_UM
+    iref_amp_uA: float = _DEFAULT_IREF_AMP_UA
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
@@ -36,29 +70,78 @@ class VRefParams:
 
 def _params_block(p: VRefParams, supply_V: float) -> str:
     return f""".param VDD={supply_V}
-.param R1={p.r1_ohm}
-.param R2={p.r2_ohm}
-.param IBIAS={p.ibias_uA}u
+.param RPTAT={p.rptat_ohm}
+.param RSCALE={p.rscale_ohm}
+.param MIRROR_L={p.mirror_l_um}u
+.param W1={p.amp_w1_um}u L1={p.amp_l1_um}u
+.param W3={p.amp_w3_um}u L3={p.amp_l3_um}u
+.param W5={p.amp_w5_um}u L5={p.amp_l5_um}u
+.param Wb={p.amp_wb_um}u Lb={p.amp_lb_um}u
+.param IREF_AMP={p.iref_amp_uA}u
 """
 
 
+def _error_amp(ms: ResolvedModels) -> str:
+    """Bandgap loop amp — reuse opamp NMOS diff pair + PMOS mirror load (single-ended → net2)."""
+    lines = [
+        "* bandgap error amp: servo V(ra1)≈V(qp1) via net2 (PMOS mirror gate)",
+        "Iref_amp vdd nb_amp {IREF_AMP}",
+        mos_line("ea8", "nb_amp", "nb_amp", "0", "0", "n", w="{Wb}", l="{Lb}", ms=ms),
+        mos_line("ea5", "amp_tail", "nb_amp", "0", "0", "n", w="{W5}", l="{L5}", ms=ms),
+    ]
+    lines.extend(
+        emit_diff_pair(
+            ms,
+            vinp="ra1",
+            vinn="qp1",
+            tail="amp_tail",
+            out_p="amp_n1",
+            out_n="net2",
+            inst_p="ea1",
+            inst_n="ea2",
+        ).lines
+    )
+    lines.extend(
+        emit_pmos_load(
+            ms,
+            drain_ref="amp_n1",
+            drain_out="net2",
+            inst_ref="ea3",
+            inst_out="ea4",
+        ).lines
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _ptat_mirror(ms: ResolvedModels, *, mirror_w: str = "8u") -> str:
+    w, l = mirror_w, "{MIRROR_L}"
+    return "\n".join(
+        [
+            mos_line("p1", "qp1", "net2", "vdd", "vdd", "p", w=w, l=l, ms=ms),
+            mos_line("p2", "ra1", "net2", "vdd", "vdd", "p", w=w, l=l, ms=ms),
+            mos_line("p3", "vref", "net2", "vdd", "vdd", "p", w=w, l=l, ms=ms),
+        ]
+    )
+
+
 def _build_bandgap_deck(p: VRefParams, supply_V: float) -> str:
-    """Resistor divider + BJT PTAT branch (MOS approximation on SKY130)."""
+    """SKY130 substrate-PNP bandgap: CTAT (Q1) + PTAT (Q2 ΔVbe × Rscale/Rptat) → vref."""
     ms = resolve_models()
     body = f"""
-* OpenForge SKY130 voltage reference
+* OpenForge SKY130 bandgap (substrate PNP PTAT + CTAT)
 Vsup vdd 0 {supply_V}
-Ibias vdd n_bias {{IBIAS}}
-Q1 vbe1 vbe1 0 0 {ms.npn} area=1
-Q2 vbe2 vbe1 0 0 {ms.npn} area=8
-Rptat vbe2 n_trim 5000
-Rtop vdd vref {{R1}}
-Rbot vref 0 {{R2}}
-{mos_line("bias", "n_bias", "n_bias", "0", "0", "n", w="4u", l="0.5u", ms=ms)}
+{_error_amp(ms)}{_ptat_mirror(ms, mirror_w=f"{p.mirror_w_um}u")}
+* Substrate PNP: C=B=0, E=signal (SKY130 sky130_fd_pr__pnp_11v0)
+Q1 0 0 qp1 0 {ms.pnp} area=1
+Q2 0 0 qp2 0 {ms.pnp} area=8
+Q3 0 0 qp3 0 {ms.pnp} area=1
+Rptat ra1 qp2 {{RPTAT}}
+Rscale vref qp3 {{RSCALE}}
 Cout vref 0 10p
 .control
 set filetype=ascii
 op
+print v(vref) v(qp1) v(ra1) v(net2)
 let isupp = abs(i(vsup))
 print isupp
 dc Vsup 3 5.5 0.1
@@ -72,23 +155,68 @@ meas dc tempco pp v(vref)
     return ms.block + _params_block(p, supply_V) + body
 
 
+def _build_psrr_deck(p: VRefParams, supply_V: float) -> str:
+    """AC PSRR: 100 mVpp ripple on VDD, measure vref at 100 Hz (bundled LDO pattern)."""
+    ms = resolve_models()
+    body = f"""
+* OpenForge bandgap PSRR
+Vsup vdd 0 dc {supply_V} ac 0.1
+{_error_amp(ms)}{_ptat_mirror(ms, mirror_w=f"{p.mirror_w_um}u")}
+Q1 0 0 qp1 0 {ms.pnp} area=1
+Q2 0 0 qp2 0 {ms.pnp} area=8
+Q3 0 0 qp3 0 {ms.pnp} area=1
+Rptat ra1 qp2 {{RPTAT}}
+Rscale vref qp3 {{RSCALE}}
+Cout vref 0 10p
+.control
+set filetype=ascii
+op
+ac dec 30 10 1Meg
+meas ac psrr_db find vdb(vref) at=100
+.endc
+.end
+"""
+    return ms.block + _params_block(p, supply_V) + body
+
+
+def _comment_spice_control_block(deck: str) -> str:
+    """Comment .control … .endc for schematic export (meas/print lines are not devices)."""
+    out: list[str] = []
+    in_control = False
+    for line in deck.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(".control"):
+            in_control = True
+        if in_control:
+            out.append(line if stripped.startswith("*") else f"* {line}")
+            if stripped.startswith(".endc"):
+                in_control = False
+            continue
+        if stripped.startswith(".") and not stripped.startswith(".param"):
+            out.append(line if stripped.startswith("*") else f"* {line}")
+        else:
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
 class VRefTopology(Topology):
     circuit_type = "vref"
     topology_name = "sky130_bandgap"
-    spec_weights = {"vref_V": 2.0, "line_reg_mV": 1.5, "tempco_ppm": 1.0, "iq_uA": 1.0}
+    spec_weights = {"vref_V": 2.0, "line_reg_mV": 1.5, "tempco_ppm": 1.0, "iq_uA": 1.0, "psrr_dB": 0.4}
 
     def default_params(self) -> VRefParams:
         return VRefParams()
 
     def param_ranges(self) -> dict[str, tuple[float, float, bool]]:
         return {
-            "r1_ohm": (5000.0, 50000.0, True),
-            "r2_ohm": (5000.0, 50000.0, True),
-            "ibias_uA": (1.0, 20.0, True),
+            "rptat_ohm": (400.0, 3000.0, True),
+            "rscale_ohm": (4000.0, 16000.0, True),
+            "mirror_l_um": (1.0, 6.0, True),
+            "mirror_w_um": (4.0, 24.0, True),
         }
 
     def measurable_specs(self) -> set[str]:
-        return {"vref_V", "line_reg_mV", "tempco_ppm", "iq_uA"}
+        return {"vref_V", "line_reg_mV", "tempco_ppm", "iq_uA", "psrr_dB"}
 
     def measure(
         self, params: VRefParams, *, supply_V: float = 5.0, cload_F: float = 10e-12, with_full: bool = True
@@ -101,7 +229,7 @@ class VRefTopology(Topology):
             m.ok = False
             return m
 
-        ok, out = run_ngspice(_build_bandgap_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 30))
+        ok, out = run_ngspice(_build_bandgap_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 45))
         m.raw = out[-3000:]
         if not ok:
             m.error = out[:800]
@@ -109,12 +237,21 @@ class VRefTopology(Topology):
         vref = grab_meas("vref_nom", out)
         line_reg = grab_meas("line_reg", out)
         tempco = grab_meas("tempco", out)
-        isupp = grab_meas("isupp", out)
+        iq = grab_meas("isupp", out)
         m.values["vref_V"] = vref
         m.values["line_reg_mV"] = line_reg * 1000 if line_reg else None
-        m.values["iq_uA"] = abs(isupp) * 1e6 if isupp else None
+        m.values["iq_uA"] = abs(iq) * 1e6 if iq else None
         if tempco is not None and vref:
             m.values["tempco_ppm"] = abs(tempco / vref) * 1e6
+        if with_full:
+            ok_psrr, raw_psrr = run_ngspice(
+                _build_psrr_deck(params, supply_V), timeout=max(NGSPICE_TIMEOUT, 30)
+            )
+            if ok_psrr:
+                m.raw += "\n" + raw_psrr[-1500:]
+                psrr = grab_meas("psrr_db", raw_psrr)
+                if psrr is not None:
+                    m.values["psrr_dB"] = abs(psrr)
         m.ok = vref is not None and 1.18 <= vref <= 1.22
         return m
 
@@ -122,7 +259,7 @@ class VRefTopology(Topology):
         ms = resolve_models()
         if ms.model_set != "sky130":
             return f"* {_PHASE3_MSG}\n.end\n"
-        return _build_bandgap_deck(params, supply_V).replace(".control", "* .control").replace(".endc", "* .endc")
+        return _comment_spice_control_block(_build_bandgap_deck(params, supply_V))
 
     def device_list(self, params: VRefParams) -> list[dict[str, Any]]:
         ms = resolve_models()
@@ -130,9 +267,11 @@ class VRefTopology(Topology):
             return [{"name": "—", "role": "deferred (bundled)", "value": ""}]
         p = params.as_dict()
         return [
-            {"name": "Q1/Q2", "role": "parasitic BJT pair", "value": "SKY130 NPN"},
-            {"name": "Rptat", "role": "PTAT resistor", "value": f"{p['r1_ohm']/1000:.1f} kΩ"},
-            {"name": "Rdiv", "role": "divider", "value": f"{p['r2_ohm']/1000:.1f} kΩ"},
+            {"name": "Q1/Q2/Q3", "role": "substrate PNP bandgap core", "value": "SKY130 PNP 1×/8×/1×"},
+            {"name": "Rptat", "role": "PTAT ΔVbe resistor", "value": f"{p['rptat_ohm']:.0f} Ω"},
+            {"name": "Rscale", "role": "CTAT+PTAT scale", "value": f"{p['rscale_ohm']:.0f} Ω"},
+            {"name": "Mp1–3", "role": "PMOS bias mirror", "value": f"L={p['mirror_l_um']:.1f} µm"},
+            {"name": "Ea1–4", "role": "bandgap error amp (diff pair + mirror load)", "value": f"W1={p['amp_w1_um']:.0f} µm"},
         ]
 
     def package_hint(self, spec: dict[str, Any] | None = None) -> str:
