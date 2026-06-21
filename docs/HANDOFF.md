@@ -1,7 +1,7 @@
 # OpenForge — Session Handoff
 
 **Updated:** 2026-06-21 (schematic 0.9: M4 body-slice fixed via per-net routing margins + active-body slice scorer)  
-**HEAD (local):** `b062150` on `feat/schematic-orthogonal-router` (pushed) — schematic 0.9 changes uncommitted (owner to commit)
+**HEAD (local):** `4de4664` on `feat/schematic-orthogonal-router` — schematic 0.9 committed; switch body-slice trace **open**
 
 **Structural log:** `docs/semicon-log.md` entries 2–6 — vref Option B locked; CMRR bench landed but requires normalization/fixture follow-up before acceptance.
 
