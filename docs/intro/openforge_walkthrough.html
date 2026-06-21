@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenForge — Walkthrough</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #05070d; overflow: hidden;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+  #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { width: min(100vw, 177.78vh); height: min(56.25vw, 100vh); display: block;
+    background: #05070d; box-shadow: 0 0 120px rgba(0,0,0,0.85); }
+  #ui { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10; opacity: .85; }
+  button { background: rgba(20,30,48,.85); color: #cfe8ff; border: 1px solid #2a6df0; border-radius: 8px;
+    padding: 8px 18px; font-size: 14px; cursor: pointer; letter-spacing: .04em; }
+  button:hover { background: #16243c; }
+  #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #5a7596; font-size: 18px; letter-spacing: .08em; z-index: 5; }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="c" width="1280" height="720"></canvas></div>
+  <div id="loading">loading real OpenForge renders…</div>
+  <div id="ui"><button id="replay">&#9654; Replay</button></div>
+<script>
+(() => {
+  const W = 1280, H = 720;
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  // ---- REAL data from an actual `design(category='opamp', seed=42, supply=1.8v)` run on commit 03e85b6.
+  //      Numbers are read straight off the ngspice run — not fabricated. See docs/intro/assets/.
+  const REAL = {
+    spec: "Two-stage Miller op-amp, supply 1.8 V, DC gain \u2265 70 dB,\nphase margin \u2265 60\u00B0, load 5 pF, unity-gain bandwidth \u2265 5 MHz,\ninput common-mode near mid-rail.",
+    topology: "two_stage_miller_opamp",
+    supply: "1.8 V",
+    rows: [
+      { k: "DC gain  (AOL)", v: "83.7 dB",  t: "\u2265 70 dB" },
+      { k: "Unity-gain BW",  v: "7.42 MHz", t: "\u2265 5 MHz" },
+      { k: "Phase margin",   v: "61.7\u00B0",  t: "\u2265 60\u00B0" },
+      { k: "Quiescent Iq",   v: "718 \u00B5A", t: "report" },
+    ]
+  };
+
+  // ---- real assets (rendered by OpenForge, copied verbatim into assets/) --------------------
+  const ASSETS = {
+    schem:      "assets/act1_opamp_seed42.svg",
+    opamp:      "assets/cat_opamp.svg",
+    comparator: "assets/cat_comparator.svg",
+    analog_switch: "assets/cat_analog_switch.svg",
+    charge_pump:"assets/cat_charge_pump.svg",
+    vref:       "assets/cat_vref.svg",
+  };
+  const IMG = {};
+  function preload(done) {
+    const keys = Object.keys(ASSETS); let n = 0, total = keys.length;
+    keys.forEach(k => {
+      const im = new Image();
+      im.onload = im.onerror = () => { if (++n === total) done(); };
+      im.src = ASSETS[k]; IMG[k] = im;
+    });
+  }
+  const MONTAGE = ["opamp", "comparator", "analog_switch", "charge_pump", "vref"];
+  const MONTAGE_LABELS = {
+    opamp: "op-amp", comparator: "comparator", analog_switch: "analog switch",
+    charge_pump: "charge pump", vref: "voltage reference"
+  };
+
+  // ---- helpers ------------------------------------------------------------------------------
+  const clamp = (x,a,b) => Math.max(a, Math.min(b,x));
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const easeInOut = t => t < .5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2;
+  const easeOut = t => 1 - Math.pow(1-t, 3);
+  function win(t,a,b,fi=0.5,fo=0.5){ if(t<=a-fi||t>=b+fo)return 0; if(t<a)return clamp((t-(a-fi))/fi,0,1);
+    if(t>b)return clamp(1-(t-b)/fo,0,1); return 1; }
+  const COL = { bg0:'#070b14', bg1:'#0c1424', cyan:'#39d6ff', blue:'#2a6df0', teal:'#1ce0c3',
+    gold:'#ffc24d', red:'#ff5a6e', green:'#5dffa0', text:'#dbeeff', dim:'#6f8bad' };
+
+  function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+  function drawFit(im,x,y,w,h){ if(!im||!im.complete||!im.naturalWidth) return;
+    const ar=im.naturalWidth/im.naturalHeight; let dw=w,dh=w/ar; if(dh>h){dh=h;dw=h*ar;}
+    ctx.drawImage(im, x+(w-dw)/2, y+(h-dh)/2, dw, dh); }
+
+  function background(t){
+    const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,COL.bg1); g.addColorStop(1,COL.bg0);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.globalAlpha=.08; ctx.strokeStyle=COL.blue; ctx.lineWidth=1;
+    const step=44, o=(t*7)%step;
+    for(let x=-o;x<W;x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=-o;y<H;y+=step){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    ctx.restore();
+  }
+  function vignette(){ const g=ctx.createRadialGradient(W/2,H/2,H*0.28,W/2,H/2,H*0.9);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.55)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }
+
+  function wordmark(alpha){ ctx.save(); ctx.globalAlpha=alpha;
+    ctx.fillStyle=COL.cyan; ctx.beginPath();
+    ctx.moveTo(40,30); ctx.lineTo(52,30); ctx.lineTo(44,42); ctx.lineTo(56,42);
+    ctx.lineTo(34,62); ctx.lineTo(42,42); ctx.lineTo(32,42); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=COL.text; ctx.font='700 22px "Segoe UI",sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+    ctx.fillText('OpenForge', 64, 40); ctx.restore(); }
+
+  function badge(x,y,text,ok){ ctx.save();
+    const w=ctx.measureText(text).width+34; roundRect(ctx,x,y-15,w,30,15);
+    ctx.fillStyle = ok? 'rgba(93,255,160,0.16)':'rgba(255,194,77,0.16)';
+    ctx.fill(); ctx.strokeStyle = ok?COL.green:COL.gold; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle = ok?COL.green:COL.gold; ctx.font='700 14px "Segoe UI",sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText(text, x+16, y+1); ctx.restore(); return w; }
+
+  // =================================== ACT 1 (real app, ~0-12s) ==============================
+  const A1 = { specA:0.4, specB:3.8, runA:4.2, runB:6.0, resA:6.2, resB:11.6 };
+  function act1(t, alpha){
+    ctx.save(); ctx.globalAlpha = alpha;
+    // left: spec editor panel
+    const px=70, py=120, pw=520, ph=470;
+    roundRect(ctx,px,py,pw,ph,12); ctx.fillStyle='rgba(12,22,40,0.92)'; ctx.fill();
+    ctx.strokeStyle='#1d3a63'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#13233d'; roundRectTop(ctx,px,py,pw,40,12); ctx.fill();
+    ctx.fillStyle=COL.text; ctx.font='600 15px "Segoe UI",sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+    ctx.fillText('spec  ·  Op-Amp product', px+16, py+20);
+    ctx.fillStyle=COL.dim; ctx.font='600 12px "Consolas",monospace';
+    ctx.fillText('plain language — not a netlist', px+pw-220, py+20);
+    // typed spec
+    const sp = clamp((t-A1.specA)/(A1.specB-A1.specA),0,1);
+    const full = REAL.spec; const n=Math.floor(sp*full.length); const shown=full.slice(0,n);
+    ctx.font='500 19px "Consolas",monospace'; ctx.fillStyle=COL.teal; ctx.textBaseline='top';
+    wrapText(shown, px+22, py+62, pw-44, 28);
+    if(sp<1 && Math.floor(t*2)%2===0){ /* caret blink handled by partial text */ }
+    // design button
+    const bx=px+pw-186, by=py+ph-58, bw=164, bh=38;
+    const pressing = t>=A1.runA && t<A1.runB;
+    roundRect(ctx,bx,by,bw,bh,9);
+    ctx.fillStyle = pressing? COL.blue : (sp>=1? 'rgba(42,109,240,0.9)':'rgba(42,109,240,0.4)'); ctx.fill();
+    ctx.fillStyle='#ffffff'; ctx.font='700 16px "Segoe UI",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(pressing? 'Designing…' : 'Design Chip', bx+bw/2, by+bh/2);
+
+    // right: result / schematic panel
+    const qx=620, qy=120, qw=590, qh=470;
+    roundRect(ctx,qx,qy,qw,qh,12); ctx.fillStyle='rgba(8,14,26,0.92)'; ctx.fill();
+    ctx.strokeStyle='#1d3a63'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#13233d'; roundRectTop(ctx,qx,qy,qw,40,12); ctx.fill();
+    ctx.fillStyle=COL.text; ctx.font='600 15px "Segoe UI",sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('result  ·  ' + REAL.topology, qx+16, qy+20);
+
+    if(t < A1.resA){
+      // running ngspice beat
+      ctx.fillStyle=COL.cyan; ctx.font='700 18px "Consolas",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      const dots='.'.repeat(1+Math.floor((t*3)%3));
+      ctx.fillText('running live ngspice SPICE simulation'+dots, qx+qw/2, qy+qh/2-20);
+      ctx.fillStyle=COL.dim; ctx.font='600 13px "Segoe UI",sans-serif';
+      ctx.fillText('a real transient/AC solve — not a lookup table', qx+qw/2, qy+qh/2+12);
+      // progress bar
+      const pr=clamp((t-A1.runA)/(A1.resA-A1.runA),0,1);
+      const gx=qx+90, gy=qy+qh/2+44, gw=qw-180;
+      ctx.strokeStyle='#26456f'; ctx.lineWidth=2; roundRect(ctx,gx,gy,gw,10,5); ctx.stroke();
+      ctx.fillStyle=COL.cyan; roundRect(ctx,gx,gy,gw*pr,10,5); ctx.fill();
+    } else {
+      const rp = clamp((t-A1.resA)/0.8,0,1);
+      ctx.globalAlpha = alpha*rp;
+      // metric rows
+      ctx.textBaseline='middle';
+      let ry=qy+74;
+      REAL.rows.forEach((row,i)=>{
+        const rowAlpha = clamp((t-A1.resA-i*0.18)/0.4,0,1);
+        ctx.globalAlpha = alpha*rowAlpha;
+        ctx.fillStyle=COL.dim; ctx.font='600 14px "Segoe UI",sans-serif'; ctx.textAlign='left';
+        ctx.fillText(row.k, qx+20, ry);
+        ctx.fillStyle=COL.text; ctx.font='800 18px "Consolas",monospace';
+        ctx.fillText(row.v, qx+200, ry);
+        ctx.font='600 13px "Consolas",monospace'; ctx.fillStyle=COL.dim;
+        ctx.fillText('target '+row.t, qx+330, ry);
+        if(row.t!=='report'){ ctx.font='700 14px "Segoe UI",sans-serif'; badge(qx+qw-92, ry, 'PASS', true); }
+        ry += 40;
+      });
+      ctx.globalAlpha = alpha*rp;
+      // schematic (REAL svg)
+      const slx=qx+18, sly=qy+250, slw=qw-36, slh=qh-300;
+      ctx.fillStyle='#060d18'; roundRect(ctx,slx,sly,slw,slh,8); ctx.fill();
+      ctx.strokeStyle='#16314f'; ctx.lineWidth=1; ctx.stroke();
+      drawFit(IMG.schem, slx+8, sly+8, slw-16, slh-16);
+      ctx.fillStyle=COL.dim; ctx.font='600 12px "Consolas",monospace'; ctx.textAlign='right'; ctx.textBaseline='bottom';
+      ctx.fillText('real rendered schematic · seed 42 · supply '+REAL.supply, qx+qw-16, qy+qh-10);
+    }
+    ctx.restore();
+
+    // caption strip
+    let cap='';
+    if(t<A1.runA) cap='① plain-language spec — the Op-Amp product, in words';
+    else if(t<A1.resA) cap='② Design Chip → a live ngspice SPICE simulation runs';
+    else cap='③ measured results read off the run — all targets PASS';
+    caption(cap, alpha*win(t,A1.specA,A1.resB+0.4,0.4,0.4));
+  }
+  function roundRectTop(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x,y+h); c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+    c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r); c.lineTo(x+w,y+h); c.closePath(); }
+  function wrapText(text,x,y,maxW,lh){
+    const paras = text.split('\n'); let yy=y;
+    for(const para of paras){
+      const words=para.split(' '); let line='';
+      for(const w of words){ const test=line?line+' '+w:w;
+        if(ctx.measureText(test).width>maxW){ ctx.fillText(line,x,yy); line=w; yy+=lh; } else line=test; }
+      ctx.fillText(line,x,yy); yy+=lh;
+    }
+  }
+  function caption(text, alpha){ if(alpha<=0||!text) return; ctx.save(); ctx.globalAlpha=alpha;
+    ctx.font='600 19px "Segoe UI",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const w=ctx.measureText(text).width+44; roundRect(ctx,W/2-w/2,H-58,w,36,18);
+    ctx.fillStyle='rgba(8,14,26,0.85)'; ctx.fill(); ctx.strokeStyle='#1d3a63'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=COL.text; ctx.fillText(text, W/2, H-40); ctx.restore(); }
+
+  // =================================== ACT 2 (flip-book, ~12-18.5s) ==========================
+  // Page-flip montage across the five REAL category renders, accelerating.
+  const A2 = { start: 12.2, end: 18.6 };
+  // flip schedule: cumulative times each page becomes active — gaps shrink hard (accelerating).
+  const FLIP_AT = [0.0, 2.2, 3.7, 4.7, 5.35, 5.8];
+  const FLIP_DUR = [0.5, 0.4, 0.32, 0.26, 0.22]; // each flip is quicker too
+  function act2(t, alpha){
+    ctx.save(); ctx.globalAlpha=alpha;
+    const lt = t - A2.start;
+    let idx = 0; for(let i=0;i<FLIP_AT.length;i++){ if(lt>=FLIP_AT[i]) idx=i; }
+    idx = clamp(idx, 0, MONTAGE.length-1);
+    const nextIdx = clamp(idx+1, 0, MONTAGE.length-1);
+    const flipStart = FLIP_AT[idx+1];
+    const fdur = FLIP_DUR[clamp(idx,0,FLIP_DUR.length-1)];
+    let flip = 0;
+    if(flipStart!==undefined && idx+1<MONTAGE.length && lt>=flipStart-fdur && lt<flipStart){
+      flip = clamp((lt-(flipStart-fdur))/fdur, 0, 1);
+    }
+    const fx=W/2-360, fy=110, fw=720, fh=470;
+    // outer book frame
+    ctx.fillStyle='#0a1322'; roundRect(ctx,fx-14,fy-14,fw+28,fh+28,14); ctx.fill();
+    ctx.strokeStyle='#1d3a63'; ctx.lineWidth=2; ctx.stroke();
+    // inner page panel — ALWAYS full width (so flips never collapse to a bare line)
+    ctx.fillStyle='#060d18'; roundRect(ctx,fx,fy,fw,fh,8); ctx.fill();
+    ctx.strokeStyle='#16314f'; ctx.lineWidth=1; ctx.stroke();
+    // which page's content to show; content (not the panel) does the horizontal flip
+    const showKey = (flip>=0.5) ? MONTAGE[nextIdx] : MONTAGE[idx];
+    let sx = 1;
+    if(flip>0){ sx = (flip<0.5) ? Math.cos(flip*Math.PI) : Math.cos((1-flip)*Math.PI); }
+    sx = Math.max(0.03, Math.abs(sx));
+    ctx.save();
+    ctx.translate(fx+fw/2, 0); ctx.scale(sx, 1); ctx.translate(-(fx+fw/2), 0);
+    drawFit(IMG[showKey], fx+18, fy+44, fw-36, fh-76);
+    if(showKey==='vref'){
+      ctx.fillStyle=COL.dim; ctx.font='600 16px "Consolas",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('bandgap floorplan not yet defined', fx+fw/2, fy+fh/2+10);
+      ctx.font='500 13px "Segoe UI",sans-serif';
+      ctx.fillText('(honest: this category template is still in progress)', fx+fw/2, fy+fh/2+36);
+    }
+    ctx.restore();
+    // labels (static, switch with showKey at the flip midpoint)
+    ctx.fillStyle=COL.cyan; ctx.font='700 19px "Segoe UI",sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(MONTAGE_LABELS[showKey], fx+18, fy+13);
+    ctx.fillStyle=COL.dim; ctx.font='600 12px "Consolas",monospace'; ctx.textAlign='right';
+    ctx.fillText('real OpenForge render', fx+fw-16, fy+17);
+    // page index dots
+    const dn=MONTAGE.length, dy=fy+fh+30, dgap=22, dx0=W/2-(dn-1)*dgap/2;
+    const activeDot = (flip>=0.5)?nextIdx:idx;
+    for(let i=0;i<dn;i++){ ctx.beginPath(); ctx.arc(dx0+i*dgap, dy, 5, 0, 7);
+      ctx.fillStyle = i===activeDot?COL.cyan:'#26456f'; ctx.fill(); }
+    ctx.restore();
+    caption('one pipeline, many blocks — five real categories', alpha*win(t,A2.start,A2.end,0.4,0.4));
+  }
+
+  // =================================== ACT 3 (chat → chip → brand, ~18.5-25.5s) ==============
+  const A3 = { start: 18.6, chip: 20.2, brand: 22.2, end: 25.6 };
+  function act3(t, alpha){
+    ctx.save(); ctx.globalAlpha=alpha;
+    const cx=W/2, cy=H/2-40;
+    // chat prompt that shrinks toward the die
+    const pin = win(t, A3.start, A3.chip+0.3, 0.4, 0.4);
+    if(pin>0){
+      const morph = clamp((t-A3.start)/(A3.chip-A3.start),0,1);
+      const scale = lerp(1, 0.2, easeInOut(morph));
+      const yy = lerp(cy, cy, 1);
+      ctx.save(); ctx.globalAlpha=alpha*pin*(1-clamp((t-A3.chip)/0.4,0,1));
+      ctx.translate(cx, yy); ctx.scale(scale, scale);
+      const bw=720, bh=80; roundRect(ctx,-bw/2,-bh/2,bw,bh,16);
+      ctx.fillStyle='rgba(16,26,44,0.95)'; ctx.fill(); ctx.strokeStyle=COL.blue; ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle=COL.text; ctx.font='600 26px "Segoe UI",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('“design me a low-power analog MAC”', 0, 0); ctx.restore();
+    }
+    // chip die
+    const cin = clamp((t-A3.chip)/0.7,0,1);
+    if(cin>0){
+      ctx.save(); ctx.globalAlpha=alpha*cin; ctx.translate(cx, cy);
+      const s = lerp(0.6,1,easeOut(cin)); const pkg=260*s;
+      const pins=10, pl=24*s, gap=pkg/pins; ctx.fillStyle='#d9b25a';
+      for(let i=0;i<pins;i++){ const o=-pkg/2+gap*(i+0.5);
+        ctx.fillRect(o-5,-pkg/2-pl,10,pl); ctx.fillRect(o-5,pkg/2,10,pl);
+        ctx.fillRect(-pkg/2-pl,o-5,pl,10); ctx.fillRect(pkg/2,o-5,pl,10); }
+      const g=ctx.createLinearGradient(-pkg/2,-pkg/2,pkg/2,pkg/2); g.addColorStop(0,'#1b1f26'); g.addColorStop(1,'#0a0c10');
+      ctx.fillStyle=g; roundRect(ctx,-pkg/2,-pkg/2,pkg,pkg,14); ctx.fill();
+      ctx.strokeStyle='#3a4150'; ctx.lineWidth=2; ctx.stroke();
+      const die=pkg*0.6; const dg=ctx.createLinearGradient(-die/2,-die/2,die/2,die/2);
+      dg.addColorStop(0,COL.blue); dg.addColorStop(.5,'#123a6b'); dg.addColorStop(1,COL.teal);
+      ctx.fillStyle=dg; ctx.fillRect(-die/2,-die/2,die,die);
+      ctx.strokeStyle='rgba(255,255,255,0.22)'; ctx.lineWidth=1;
+      for(let i=1;i<6;i++){ const o=-die/2+die*i/6; ctx.beginPath();ctx.moveTo(o,-die/2);ctx.lineTo(o,die/2);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(-die/2,o);ctx.lineTo(die/2,o);ctx.stroke(); }
+      ctx.fillStyle=COL.gold; ctx.beginPath(); ctx.arc(-pkg/2+20,-pkg/2+20,6,0,7); ctx.fill();
+      ctx.fillStyle='#9fb6d4'; ctx.font=`700 ${18*s}px "Consolas",monospace`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('NETIE FORGE', 0, -6*s);
+      ctx.font=`500 ${12*s}px "Consolas",monospace`; ctx.fillStyle='#7c93b3'; ctx.fillText('ANALOG-MAC', 0, 14*s);
+      ctx.restore();
+    }
+    // brand lockup
+    const bin = win(t, A3.brand, A3.end, 0.6, 0.4);
+    if(bin>0){
+      ctx.save(); ctx.globalAlpha=alpha*bin; ctx.textAlign='center';
+      const g=ctx.createLinearGradient(cx-220,0,cx+220,0); g.addColorStop(0,COL.cyan); g.addColorStop(1,COL.teal);
+      ctx.fillStyle=g; ctx.font='800 60px "Segoe UI",sans-serif'; ctx.textBaseline='middle';
+      ctx.fillText('Netie Forge', cx, H-188);
+      ctx.fillStyle=COL.text; ctx.font='600 24px "Segoe UI",sans-serif';
+      ctx.fillText('chat to chip', cx, H-146);
+      ctx.fillStyle=COL.dim; ctx.font='500 15px "Segoe UI",sans-serif';
+      ctx.fillText('north-star vision · github.com/Netie-AI/OpenForge', cx, H-116);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // honest capability line — shown as its own frame near the end of ACT 3
+  function honestLine(alpha){ if(alpha<=0) return; ctx.save(); ctx.globalAlpha=alpha;
+    ctx.font='600 16px "Consolas",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const txt='parametric design within validated topology templates, simulation-gated';
+    const w=ctx.measureText(txt).width+40; roundRect(ctx,W/2-w/2,72,w,34,17);
+    ctx.fillStyle='rgba(8,14,26,0.85)'; ctx.fill(); ctx.strokeStyle='#2a6df0'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=COL.cyan; ctx.fillText(txt, W/2, 90); ctx.restore(); }
+
+  // =================================== timeline / loop =======================================
+  const END = 25.8;
+  let start = null;
+  function frame(now){
+    if(start===null) start=now;
+    let t=(now-start)/1000;
+    if(t>END){ start=now; t=0; }
+    background(t);
+    act1(t, win(t, 0.2, 11.8, 0.4, 0.6));
+    act2(t, win(t, 12.2, 18.4, 0.5, 0.5));
+    act3(t, win(t, 18.6, END, 0.5, 0.3));
+    honestLine(win(t, 22.6, END, 0.6, 0.3));
+    vignette();
+    wordmark(win(t, 0.2, END, 0.6, 0.4)*0.9);
+    requestAnimationFrame(frame);
+  }
+
+  document.getElementById('replay').addEventListener('click', () => { start=null; });
+  preload(() => { document.getElementById('loading').style.display='none'; requestAnimationFrame(frame); });
+})();
+</script>
+</body>
+</html>
